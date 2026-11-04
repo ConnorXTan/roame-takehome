@@ -12,6 +12,13 @@ mkdir -p "$results"
 rm -f "$results/start-late-server"
 results="$(cd "$results" && pwd)"
 
+# The same JDK lookup as the Xcode build phase, for shells with no JAVA_HOME and no java on the PATH.
+if [ -z "${JAVA_HOME:-}" ] && ! /usr/libexec/java_home >/dev/null 2>&1; then
+    for candidate in "/Applications/Android Studio.app/Contents/jbr/Contents/Home" /opt/homebrew/opt/openjdk@17 /opt/homebrew/opt/openjdk /usr/local/opt/openjdk@17; do
+        if [ -x "$candidate/bin/java" ]; then export JAVA_HOME="$candidate"; break; fi
+    done
+fi
+
 ./gradlew -q :server:installDist
 server=server/build/install/server/bin/server
 

@@ -112,6 +112,40 @@ final class FlightExplorerUITests: XCTestCase {
         waitForCount("1,000 flights")
     }
 
+    /// Opens a compact date picker, steps back to February, and taps a day in its calendar.
+    private func pickDay(_ picker: String, label: String) {
+        any(picker).buttons.firstMatch.tap()
+        let previous = app.buttons["DatePicker.PreviousMonth"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 4))
+        let day = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", label)).firstMatch
+        for _ in 0..<3 where !day.exists {
+            previous.tap()
+            _ = day.waitForExistence(timeout: 1)
+        }
+        XCTAssertTrue(day.exists, "calendar should show \(label)")
+        day.tap()
+        app.buttons["PopoverDismissRegion"].firstMatch.tap()
+    }
+
+    /// Flight dates have no time zone, so a device east or west of UTC must not shift them a day.
+    func testDateRangeIncludesBothBoundariesInAnyTimeZone() {
+        for zone in ["America/Los_Angeles", "Pacific/Auckland"] {
+            launch(environment: ["TZ": zone])
+            waitForCount("1,000 flights")
+            app.buttons["filters-button"].tap()
+            pickDay("date-start", label: "February 3")
+            pickDay("date-end", label: "February 5")
+            snapshot("03b-dates-\(zone.split(separator: "/").last ?? "")")
+            app.buttons["show-results"].tap()
+
+            XCTAssertTrue(app.buttons["Remove Feb 3 – Feb 5"].waitForExistence(timeout: 3), "wrong dates in \(zone)")
+            waitForCount("41 flights")
+            app.buttons["reset-filters"].tap()
+            waitForCount("1,000 flights")
+            app.terminate()
+        }
+    }
+
     func testSelectionCarriesFromListToMapAndClearsWhenFiltered() {
         launch()
         waitForCount("1,000 flights")
