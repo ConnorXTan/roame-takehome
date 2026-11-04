@@ -302,14 +302,15 @@ private struct ResultsList: View {
             .onTapGesture {
                 model.selectFlight(flight.id == model.selectedFlight?.id ? nil : flight.id)
             }
-            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+            // The gap above the first row is part of the row, not a content margin, because
+            // scrollTo ignores margins and would otherwise park the row against the header.
+            .listRowInsets(EdgeInsets(top: flight.id == model.results.first?.id ? 12 : 5, leading: 16, bottom: 5, trailing: 16))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.immediately)
-        .contentMargins(.top, 7, for: .scrollContent)
         .contentMargins(.bottom, bottomInset, for: .scrollContent)
         .background(Palette.canvas)
         .refreshable { await refresh() }

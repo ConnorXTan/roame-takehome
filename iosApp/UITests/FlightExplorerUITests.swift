@@ -2,8 +2,12 @@ import XCTest
 
 /// Drives the real app against the local API, which must be running: `./gradlew :server:run`.
 /// Set SCREENSHOT_DIR in the test environment to also write a PNG at each named step.
+/// The failure-mode tests skip themselves unless started by scripts/ios-failure-tests.sh.
 final class FlightExplorerUITests: XCTestCase {
     private var app: XCUIApplication!
+
+    /// A database per test, so no test depends on what an earlier one cached or saved.
+    private let databaseName = "uitest-\(UUID().uuidString).db"
 
     override func setUp() {
         continueAfterFailure = false
@@ -11,7 +15,7 @@ final class FlightExplorerUITests: XCTestCase {
     }
 
     private func launch(environment: [String: String] = [:]) {
-        app.launchEnvironment = environment
+        app.launchEnvironment = environment.merging(["FLIGHT_DB_NAME": databaseName]) { current, _ in current }
         app.launch()
         XCTAssertTrue(resultCount.waitForExistence(timeout: 15))
     }
@@ -192,7 +196,8 @@ final class FlightExplorerUITests: XCTestCase {
         wait(for: [becameRemove], timeout: 3)
 
         app.tabBars.buttons["Saved"].tap()
-        // Found by content, not by count, so the test doesn't depend on what an earlier run saved.
+        XCTAssertTrue(app.staticTexts["saved-count"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.staticTexts["saved-count"].label, "1 flight, available offline")
         let savedRow = any("saved-list").cells.containing(.staticText, identifier: "Chicago to Dublin").element
         XCTAssertTrue(savedRow.waitForExistence(timeout: 3))
         snapshot("10-saved")
@@ -213,5 +218,127 @@ final class FlightExplorerUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["message-toast"].waitForExistence(timeout: 3))
         snapshot("11-save-failed")
         XCTAssertEqual(saveButton.label, "Save", "a failed save must not look saved")
+    }
+
+    // MARK: Offline and failure handling
+
+    private let noServer = "http://localhost:9"
+    private let emptyServer = "http://localhost:8091"
+    private let brokenServer = "http://localhost:8092"
+    private let malformedServer = "http://localhost:8093"
+    private let lateServer = "http://localhost:8094"
+
+    private func requireFailureServers() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["FAILURE_SERVERS"] == "1",
+            "Needs the servers started by scripts/ios-failure-tests.sh"
+        )
+    }
+
+    private func saveSecondFlight() {
+        any("results-list").cells.element(boundBy: 1).tap()
+        let saveButton = app.buttons["card-save"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
+        saveButton.tap()
+        let saved = expectation(for: NSPredicate(format: "label == 'Remove'"), evaluatedWith: saveButton)
+        wait(for: [saved], timeout: 3)
+    }
+
+    /// The brief's headline case: reopen with no API, and everything still works from the device.
+    func testCachedResultsAndSavedFlightsWorkAfterReopeningOffline() {
+        launch()
+        waitForCount("1,000 flights")
+        saveSecondFlight()
+        app.terminate()
+
+        launch(environment: ["API_BASE_URL": noServer])
+        waitForCount("1,000 flights")
+        XCTAssertTrue(any("stale-banner").waitForExistence(timeout: 10), "cached data should say it is stale")
+        snapshot("12-offline")
+
+        let destination = app.textFields["destination-field"]
+        destination.tap()
+        destination.typeText("Dublin")
+        waitForCount("29 flights")
+        app.buttons["reset-filters"].tap()
+        waitForCount("1,000 flights")
+
+        app.tabBars.buttons["Saved"].tap()
+        let savedRow = any("saved-list").cells.containing(.staticText, identifier: "Chicago to Dublin").element
+        XCTAssertTrue(savedRow.waitForExistence(timeout: 3))
+        savedRow.tap()
+        app.buttons["card-save"].tap()
+        XCTAssertTrue(app.staticTexts["No saved flights yet"].waitForExistence(timeout: 3), "removing should work offline")
+    }
+
+    func testNoCacheAndNoServerIsAnErrorThatRetryRecoversFrom() throws {
+        try requireFailureServers()
+        launch(environment: ["API_BASE_URL": lateServer])
+        XCTAssertTrue(app.staticTexts["Couldn't load flights"].waitForExistence(timeout: 10))
+        snapshot("13-error")
+
+        // Tells the script the error has been seen, so it can start the server this test points at.
+        let directory = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] ?? "/tmp"
+        FileManager.default.createFile(atPath: "\(directory)/start-late-server", contents: nil)
+
+        let retry = app.buttons["state-action"]
+        let deadline = Date().addingTimeInterval(60)
+        while resultCount.label != "1,000 flights", Date() < deadline {
+            if retry.exists { retry.tap() }
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+        }
+        XCTAssertEqual(resultCount.label, "1,000 flights", "Try again should recover once the server is back")
+    }
+
+    func testASuccessfulEmptyResponseIsNotAnError() throws {
+        try requireFailureServers()
+        launch(environment: ["API_BASE_URL": emptyServer])
+        XCTAssertTrue(app.staticTexts["No flights available"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Couldn't load flights"].exists)
+        XCTAssertFalse(any("stale-banner").exists)
+        snapshot("14-empty")
+    }
+
+    func testAServerErrorWithNoCacheIsAnError() throws {
+        try requireFailureServers()
+        launch(environment: ["API_BASE_URL": brokenServer])
+        XCTAssertTrue(app.staticTexts["Couldn't load flights"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["The flight service is having trouble. Please try again."].exists)
+    }
+
+    func testAMalformedResponseWithNoCacheIsAnError() throws {
+        try requireFailureServers()
+        launch(environment: ["API_BASE_URL": malformedServer])
+        XCTAssertTrue(app.staticTexts["Couldn't load flights"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["The flight service sent data we couldn't read. Please try again."].exists)
+    }
+
+    func testBadResponsesLeaveCachedFlightsInPlace() throws {
+        try requireFailureServers()
+        launch()
+        waitForCount("1,000 flights")
+        app.terminate()
+
+        for server in [brokenServer, malformedServer] {
+            launch(environment: ["API_BASE_URL": server])
+            waitForCount("1,000 flights")
+            XCTAssertTrue(any("stale-banner").waitForExistence(timeout: 10), "\(server) should mark the data stale")
+            app.terminate()
+        }
+    }
+
+    func testSavedFlightsSurviveBeingDroppedFromTheApi() throws {
+        try requireFailureServers()
+        launch()
+        waitForCount("1,000 flights")
+        saveSecondFlight()
+        app.terminate()
+
+        launch(environment: ["API_BASE_URL": emptyServer])
+        XCTAssertTrue(app.staticTexts["No flights available"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Saved"].tap()
+        let savedRow = any("saved-list").cells.containing(.staticText, identifier: "Chicago to Dublin").element
+        XCTAssertTrue(savedRow.waitForExistence(timeout: 3), "the API no longer has this flight, but it was saved")
+        snapshot("15-saved-after-empty")
     }
 }

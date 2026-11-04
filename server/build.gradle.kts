@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     application
@@ -5,6 +7,16 @@ plugins {
 
 application {
     mainClass.set("travel.roame.takehome.server.MainKt")
+}
+
+// Built for 17, not the JDK 25 running Gradle, so the installDist launcher works on any JDK the project accepts.
+kotlin {
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 dependencies {

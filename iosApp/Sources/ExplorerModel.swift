@@ -152,13 +152,20 @@ final class ExplorerModel {
     init() {
         let configured = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
         let baseUrl = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? configured ?? "http://localhost:8080"
-        // Debug QA switch, set from the scheme or a UI test. See the README.
+        // Debug QA switches, set from the scheme or a UI test. See the README.
         #if DEBUG
-        let failSavedWrites = ProcessInfo.processInfo.environment["FAIL_SAVED_WRITES"] == "1"
+        let environment = ProcessInfo.processInfo.environment
+        let failSavedWrites = environment["FAIL_SAVED_WRITES"] == "1"
+        let databaseName = environment["FLIGHT_DB_NAME"] ?? "flights.db"
         #else
         let failSavedWrites = false
+        let databaseName = "flights.db"
         #endif
-        controller = IosExplorerKt.createExplorerController(baseUrl: baseUrl, failSavedWrites: failSavedWrites)
+        controller = IosExplorerKt.createExplorerController(
+            baseUrl: baseUrl,
+            failSavedWrites: failSavedWrites,
+            databaseName: databaseName
+        )
         subscription = controller.watch { [weak self] state in
             MainActor.assumeIsolated { self?.apply(state) }
         }
