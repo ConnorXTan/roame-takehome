@@ -1,5 +1,6 @@
 package travel.roame.takehome.android.ui
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -71,6 +72,7 @@ private const val WORLD_WIDTH_AT_ZOOM_ZERO = 512.0
 @Composable
 fun FlightMap(
     state: ExplorerState,
+    interactive: Boolean,
     onMarkerTap: (String) -> Unit,
     onMapTap: () -> Unit,
     modifier: Modifier = Modifier,
@@ -119,7 +121,19 @@ fun FlightMap(
     }
     LaunchedEffect(state.selectedFlight?.id) { renderer.showRoute(state.selectedFlight) }
 
-    AndroidView(factory = { mapView }, modifier = modifier)
+    // The map stays alive behind the list and the Saved tab, and being a native view it would still
+    // get drags that nothing above it consumes. Consuming them here, rather than hiding the view,
+    // avoids tearing down its GL surface and flashing blank on the way back.
+    val isInteractive = rememberUpdatedState(interactive)
+    AndroidView(
+        factory = {
+            mapView.apply {
+                @SuppressLint("ClickableViewAccessibility")
+                setOnTouchListener { _, _ -> !isInteractive.value }
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 private data class MarkerPalette(val accent: Int, val ink: Int, val surface: Int)

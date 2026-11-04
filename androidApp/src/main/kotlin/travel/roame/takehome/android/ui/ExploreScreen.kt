@@ -129,6 +129,7 @@ fun ExploreScreen(state: ExplorerState, controller: ExplorerController, visible:
                 // Kept alive beneath the list once opened, so returning to it keeps the camera and costs nothing.
                 FlightMap(
                     state = state,
+                    interactive = visible && mode == DiscoveryMode.MAP,
                     onMarkerTap = { code ->
                         focus.clearFocus()
                         controller.selectDestination(code)
