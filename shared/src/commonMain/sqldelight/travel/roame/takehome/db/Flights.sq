@@ -1,0 +1,82 @@
+-- Last successful GET /flights. Replaced atomically, so a failed refresh can never leave half a snapshot.
+CREATE TABLE cached_flight (
+    id TEXT NOT NULL PRIMARY KEY,
+    origin TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    departure_date TEXT NOT NULL,
+    program TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    cabin TEXT NOT NULL,
+    origin_city TEXT NOT NULL,
+    destination_city TEXT NOT NULL,
+    origin_latitude REAL NOT NULL,
+    origin_longitude REAL NOT NULL,
+    destination_latitude REAL NOT NULL,
+    destination_longitude REAL NOT NULL
+);
+
+-- A row here is what separates "we fetched and got nothing" from "we have never fetched".
+CREATE TABLE cache_meta (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    fetched_at_ms INTEGER NOT NULL
+);
+
+-- Saved flights keep a full copy so they survive being dropped from a later API response.
+CREATE TABLE saved_flight (
+    id TEXT NOT NULL PRIMARY KEY,
+    origin TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    departure_date TEXT NOT NULL,
+    program TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    cabin TEXT NOT NULL,
+    origin_city TEXT NOT NULL,
+    destination_city TEXT NOT NULL,
+    origin_latitude REAL NOT NULL,
+    origin_longitude REAL NOT NULL,
+    destination_latitude REAL NOT NULL,
+    destination_longitude REAL NOT NULL,
+    saved_at_ms INTEGER NOT NULL
+);
+
+selectCached:
+SELECT * FROM cached_flight;
+
+selectFetchedAt:
+SELECT fetched_at_ms FROM cache_meta WHERE id = 1;
+
+clearCached:
+DELETE FROM cached_flight;
+
+insertCached:
+INSERT OR REPLACE INTO cached_flight VALUES ?;
+
+setFetchedAt:
+INSERT OR REPLACE INTO cache_meta (id, fetched_at_ms) VALUES (1, ?);
+
+selectSaved:
+SELECT * FROM saved_flight ORDER BY saved_at_ms DESC, id ASC;
+
+-- With updateSaved this forms an upsert. ON CONFLICT DO UPDATE needs SQLite 3.24, newer than Android at minSdk 23.
+insertSavedIfAbsent:
+INSERT OR IGNORE INTO saved_flight VALUES ?;
+
+-- Also run for every flight in a refresh, so a saved copy never disagrees with the list.
+updateSaved:
+UPDATE saved_flight SET
+    origin = :origin,
+    destination = :destination,
+    departure_date = :departureDate,
+    program = :program,
+    points = :points,
+    cabin = :cabin,
+    origin_city = :originCity,
+    destination_city = :destinationCity,
+    origin_latitude = :originLatitude,
+    origin_longitude = :originLongitude,
+    destination_latitude = :destinationLatitude,
+    destination_longitude = :destinationLongitude
+WHERE id = :id;
+
+deleteSaved:
+DELETE FROM saved_flight WHERE id = ?;
