@@ -51,6 +51,7 @@ private struct MessageToast: View {
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
         .padding(.horizontal, 14)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("message-toast")
         .task(id: message.id) {
             try? await Task.sleep(for: .seconds(8))

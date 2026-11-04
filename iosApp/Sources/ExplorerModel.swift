@@ -264,8 +264,7 @@ final class ExplorerModel {
     /// The camera region that frames a route, with the antimeridian already handled in shared code.
     func routeRegion(for flight: FlightItem) -> MKCoordinateRegion {
         let frame = RouteGeometryKt.routeFrame(flight: flight.source)
-        // Nudged south so the route sits in the part of the map the bottom card doesn't cover.
-        let latitude = min(max(frame.centerLatitude - frame.latitudeSpan * 0.18, -80), 80)
+        let latitude = min(max(frame.centerLatitude, -80), 80)
         let maxSpan = (90 - abs(latitude)) * 2 - 1
         return MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: latitude, longitude: frame.centerLongitude),

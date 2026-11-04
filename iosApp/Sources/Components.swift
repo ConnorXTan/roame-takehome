@@ -185,6 +185,7 @@ struct FlightCard<Secondary: View>: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.hairline)
         }
         .shadow(color: .black.opacity(0.16), radius: 18, y: 6)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("flight-card")
     }
 }

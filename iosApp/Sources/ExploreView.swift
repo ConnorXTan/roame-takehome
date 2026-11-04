@@ -180,6 +180,7 @@ struct ExploreView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
         .background(Palette.warningSoft)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("stale-banner")
     }
 

@@ -35,8 +35,16 @@ final class FlightExplorerUITests: XCTestCase {
         app.segmentedControls["mode-picker"].buttons.element(boundBy: 1).tap()
     }
 
-    private func openList() {
-        app.segmentedControls["mode-picker"].buttons.element(boundBy: 0).tap()
+    /// Writes the UI tree next to the screenshots, for when an element can't be found.
+    private func dumpTree(_ name: String) {
+        let path = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] ?? ""
+        guard !path.isEmpty else { return }
+        let url = URL(fileURLWithPath: path).appendingPathComponent("\(name).txt")
+        try? app.debugDescription.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func any(_ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier]
     }
 
     func testSearchNarrowsResultsAndResetRestoresThem() {
@@ -104,9 +112,11 @@ final class FlightExplorerUITests: XCTestCase {
         launch()
         waitForCount("1,000 flights")
         openMap()
-        let marker = app.buttons["marker-GRU"]
-        XCTAssertTrue(marker.waitForExistence(timeout: 10))
+        let marker = any("marker-GRU")
+        let found = marker.waitForExistence(timeout: 10)
         snapshot("07-map")
+        dumpTree("07-map")
+        XCTAssertTrue(found)
         marker.tap()
         XCTAssertTrue(app.descendants(matching: .any)["destination-panel"].waitForExistence(timeout: 3))
         snapshot("08-destination")
@@ -115,23 +125,48 @@ final class FlightExplorerUITests: XCTestCase {
         snapshot("09-map-flight")
     }
 
+    func testMapPansAndZooms() {
+        launch()
+        waitForCount("1,000 flights")
+        openMap()
+        let marker = any("marker-JNB")
+        XCTAssertTrue(marker.waitForExistence(timeout: 10))
+        let start = marker.frame
+        let map = app.maps.element
+
+        // A short, measured drag: a swipe flings the marker clean off the screen.
+        let from = map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+        from.press(forDuration: 0.1, thenDragTo: from.withOffset(CGVector(dx: 60, dy: 0)))
+        snapshot("07a-after-pan")
+        dumpTree("07a-after-pan")
+        XCTAssertGreaterThan(abs(marker.frame.minX - start.minX), 20, "panning should move the map under the markers")
+
+        map.pinch(withScale: 0.3, velocity: -2)
+        map.pinch(withScale: 0.3, velocity: -2)
+        snapshot("07b-zoomed-out")
+        dumpTree("07b-zoomed-out")
+    }
+
     func testSavingAppearsInSavedAndRemoveTakesItAway() {
         launch()
         waitForCount("1,000 flights")
-        app.descendants(matching: .any)["results-list"].cells.element(boundBy: 1).tap()
+        any("results-list").cells.element(boundBy: 1).tap()
         let saveButton = app.buttons["card-save"]
         XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
         saveButton.tap()
-        XCTAssertTrue(app.buttons["Remove"].waitForExistence(timeout: 3) || saveButton.label == "Remove")
+        let becameRemove = expectation(for: NSPredicate(format: "label == 'Remove'"), evaluatedWith: saveButton)
+        wait(for: [becameRemove], timeout: 3)
 
         app.tabBars.buttons["Saved"].tap()
-        XCTAssertTrue(app.staticTexts["saved-count"].waitForExistence(timeout: 3))
+        // Found by content, not by count, so the test doesn't depend on what an earlier run saved.
+        let savedRow = any("saved-list").cells.containing(.staticText, identifier: "Chicago to Dublin").element
+        XCTAssertTrue(savedRow.waitForExistence(timeout: 3))
         snapshot("10-saved")
-        XCTAssertTrue(app.staticTexts["saved-count"].label.hasPrefix("1 flight"))
 
-        app.descendants(matching: .any)["saved-list"].cells.element(boundBy: 0).tap()
+        savedRow.tap()
         app.buttons["card-save"].tap()
-        XCTAssertTrue(app.staticTexts["No saved flights yet"].waitForExistence(timeout: 3))
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: savedRow)
+        wait(for: [gone], timeout: 3)
     }
 
     func testFailedSaveStaysUnsavedAndSaysSo() {

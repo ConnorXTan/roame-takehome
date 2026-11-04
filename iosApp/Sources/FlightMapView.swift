@@ -4,13 +4,14 @@ import SwiftUI
 
 struct FlightMapView: View {
     @Environment(ExplorerModel.self) private var model
-    @State private var camera: MapCameraPosition = .region(Self.world)
+    @State private var camera: MapCameraPosition = .camera(Self.world)
     @State private var worldWidth = 800.0
     @State private var placements: [String: MarkerPlacement] = [:]
 
-    private static let world = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 20, longitude: 45),
-        span: MKCoordinateSpan(latitudeDelta: 130, longitudeDelta: 300)
+    /// A camera distance, not a region: MapKit clamps a world-sized region to much closer in.
+    private static let world = MapCamera(
+        centerCoordinate: CLLocationCoordinate2D(latitude: 15, longitude: 40),
+        distance: 60_000_000
     )
 
     /// Which marker to raise and tint: the open destination, or the selected flight's.
@@ -24,6 +25,11 @@ struct FlightMapView: View {
             if (a.code == highlighted) != (b.code == highlighted) { return b.code == highlighted }
             return a.lowestPoints > b.lowestPoints
         }
+    }
+
+    private var bottomCover: CGFloat {
+        if model.selectedFlight != nil { return 210 }
+        return model.selectedDestination != nil ? 340 : 0
     }
 
     private func labelCoordinate(_ marker: MarkerItem) -> CLLocationCoordinate2D {
@@ -49,10 +55,10 @@ struct FlightMapView: View {
                     // Geodesic for the same reason as routes: MapKit can't take a longitude past 180.
                     MapPolyline(coordinates: [marker.coordinate, labelCoordinate(marker)], contourStyle: .geodesic)
                         .stroke(Palette.ink.opacity(0.45), lineWidth: 1)
-                    Annotation(marker.code, coordinate: marker.coordinate, anchor: .center) {
-                        Circle().fill(Palette.ink).frame(width: 5, height: 5).allowsHitTesting(false)
-                    }
-                    .annotationTitles(.hidden)
+                    // A dot made from a tiny round-capped line, so it sits in the overlay layer under
+                    // every label. Annotations have no guaranteed order and would draw over the pills.
+                    MapPolyline(coordinates: [marker.coordinate, marker.coordinate.nudged])
+                        .stroke(Palette.ink, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 }
                 if let flight = model.selectedFlight {
                     // Geodesic, so routes over the antimeridian take the short way across the Pacific.
@@ -72,7 +78,9 @@ struct FlightMapView: View {
                     .annotationTitles(.hidden)
                 }
             }
-            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            // Keeps Apple's legal label and the framed route clear of whatever covers the bottom.
+            .safeAreaPadding(.bottom, bottomCover)
             .onTapGesture { model.clearSelection() }
             // Labels re-settle once the camera stops, not on every frame of a pinch.
             .onMapCameraChange(frequency: .onEnd) { context in
@@ -82,6 +90,7 @@ struct FlightMapView: View {
                     placements = model.markerPlacements(worldWidth: next)
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("flight-map")
 
             overlays
@@ -132,6 +141,13 @@ struct FlightMapView: View {
                 Spacer()
             }
         }
+    }
+}
+
+private extension CLLocationCoordinate2D {
+    /// A hair away, because a line needs two distinct points to draw its round caps.
+    var nudged: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude + 0.0001, longitude: longitude)
     }
 }
 
@@ -232,6 +248,7 @@ private struct DestinationPanel: View {
         .background(Palette.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 18, y: 6)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("destination-panel")
     }
 }
