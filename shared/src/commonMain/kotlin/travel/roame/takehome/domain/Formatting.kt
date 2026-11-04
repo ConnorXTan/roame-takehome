@@ -17,9 +17,11 @@ private fun DayOfWeek.short(): String = name.take(3).lowercase().replaceFirstCha
 /** "Feb 1" */
 fun shortDate(date: LocalDate): String = "${date.month.short()} ${date.day}"
 
+/** "Mon, Feb 1": for rows, where the year would crowd out the cabin. */
+fun mediumDate(date: LocalDate): String = "${date.dayOfWeek.short()}, ${shortDate(date)}"
+
 /** "Mon, Feb 1, 2027" */
-fun longDate(date: LocalDate): String =
-    "${date.dayOfWeek.short()}, ${shortDate(date)}, ${date.year}"
+fun longDate(date: LocalDate): String = "${mediumDate(date)}, ${date.year}"
 
 /** "39,000" */
 fun formatPoints(points: Int): String =
@@ -43,5 +45,5 @@ fun lastUpdatedLabel(instant: Instant, zone: TimeZone = TimeZone.currentSystemDe
 
 /** Swift-friendly accessors, so the iOS app never has to touch kotlinx-datetime types. */
 val Flight.departureLabel: String get() = longDate(departureDate)
-val Flight.departureShortLabel: String get() = shortDate(departureDate)
+val Flight.departureRowLabel: String get() = mediumDate(departureDate)
 val Flight.pointsLabel: String get() = formatPoints(points)

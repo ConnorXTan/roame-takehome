@@ -32,10 +32,48 @@ class ExplorerControllerTest {
         store: FakeStore = FakeStore(),
     ): ExplorerController {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        return ExplorerController(FlightRepository(api, store, FixedClock), dispatcher, dispatcher)
+        return ExplorerController(FlightRepository(api, store, FixedClock), dispatcher, dispatcher).apply { start() }
     }
 
     private fun date(iso: String) = LocalDate.parse(iso)
+
+    // Start-up
+
+    private fun TestScope.unstartedController(api: FakeApi, store: FakeStore): ExplorerController {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        return ExplorerController(FlightRepository(api, store, FixedClock), dispatcher, dispatcher)
+    }
+
+    @Test
+    fun nothingIsFetchedUntilStart() = runTest {
+        val api = FakeApi(flights)
+        val controller = unstartedController(api, FakeStore())
+        advanceUntilIdle()
+        assertEquals(0, api.calls)
+        assertEquals(ContentKind.LOADING, controller.state.value.content)
+        controller.close()
+    }
+
+    @Test
+    fun cachedFlightsShowBeforeStart() = runTest {
+        val api = FakeApi(flights)
+        val controller = unstartedController(api, FakeStore(FlightSnapshot(flights, FixedClock.now())))
+        advanceUntilIdle()
+        assertEquals(ContentKind.RESULTS, controller.state.value.content)
+        assertEquals(0, api.calls)
+        controller.close()
+    }
+
+    @Test
+    fun startingTwiceFetchesOnce() = runTest {
+        val api = FakeApi(flights)
+        val controller = unstartedController(api, FakeStore())
+        controller.start()
+        controller.start()
+        advanceUntilIdle()
+        assertEquals(1, api.calls)
+        controller.close()
+    }
 
     // Loading, errors and offline
 

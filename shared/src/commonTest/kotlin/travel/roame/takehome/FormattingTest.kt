@@ -9,6 +9,7 @@ import travel.roame.takehome.domain.compactPoints
 import travel.roame.takehome.domain.formatPoints
 import travel.roame.takehome.domain.lastUpdatedLabel
 import travel.roame.takehome.domain.longDate
+import travel.roame.takehome.domain.mediumDate
 import travel.roame.takehome.domain.shortDate
 
 class FormattingTest {
@@ -31,6 +32,7 @@ class FormattingTest {
     fun datesFormatWithoutATimeZone() {
         val date = LocalDate.parse("2027-02-01")
         assertEquals("Feb 1", shortDate(date))
+        assertEquals("Mon, Feb 1", mediumDate(date))
         assertEquals("Mon, Feb 1, 2027", longDate(date))
     }
 

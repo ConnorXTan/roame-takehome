@@ -38,8 +38,9 @@ class FlightRepository(
             store.loadSnapshot()?.let { _snapshot.value = it.sorted() }
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             // An unreadable cache is the same as no cache: the refresh that follows decides what to show.
+            println("Flight cache unreadable: $error")
             _status.value = RefreshStatus.Failed(RefreshFailure.STORAGE)
         }
     }
@@ -58,6 +59,8 @@ class FlightRepository(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                // The UI gets a friendly category; the real cause stays visible to whoever is debugging.
+                println("Flight refresh failed: $error")
                 RefreshStatus.Failed(error.toFailure())
             }
         } finally {

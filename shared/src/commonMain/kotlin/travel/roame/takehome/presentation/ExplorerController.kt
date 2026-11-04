@@ -58,6 +58,8 @@ class ExplorerController(
 
     private var selectedFlightId: String? = null
     private var selectedDestinationCode: String? = null
+    private val cacheLoad = scope.launch { repository.loadCache() }
+    private var started = false
     private var hasSnapshot = false
     private var refreshFailed = false
     private var retryAction: (() -> Unit)? = null
@@ -69,8 +71,18 @@ class ExplorerController(
         observeResults()
         observeSnapshot()
         observeSaved()
+    }
+
+    /**
+     * Fetches for the first time. Separate from construction so a platform can settle anything the
+     * request depends on first, such as Android's local network permission, without racing it.
+     * The cache is already loading by now, so cached flights show whenever this is called.
+     */
+    fun start() {
+        if (started) return
+        started = true
         scope.launch {
-            repository.loadCache()
+            cacheLoad.join()
             repository.refresh()
         }
     }

@@ -14,9 +14,9 @@ import travel.roame.takehome.model.FlightsEnvelope
 
 /** Why a refresh failed. These stay distinct so the UI can say something true about each. */
 sealed class FlightApiException(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    class Unreachable(cause: Throwable) : FlightApiException("Could not reach the flight service", cause)
+    class Unreachable(cause: Throwable) : FlightApiException("Could not reach the flight service: ${cause.message}", cause)
     class Server(val status: Int) : FlightApiException("Flight service responded with HTTP $status")
-    class InvalidResponse(cause: Throwable) : FlightApiException("Flight service sent an unreadable response", cause)
+    class InvalidResponse(cause: Throwable) : FlightApiException("Flight service sent an unreadable response: ${cause.message}", cause)
 }
 
 interface FlightApi {
