@@ -10,8 +10,12 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.FlightExplorer">
+        <!-- Compose handles these without a restart. Rebuilding the activity would rebuild the native
+             map on every rotation, which loses the camera and, measured here, ~4 MB of native heap
+             each time. uiMode is left out so a theme switch still restarts into the matching map style. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

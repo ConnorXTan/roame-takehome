@@ -18,6 +18,11 @@ android {
         versionName = "1.0"
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
+    buildTypes {
+        // Signed with the debug key so it installs with no setup. Compose is far slower in debug
+        // builds, so this is the build to judge scrolling on.
+        release { signingConfig = signingConfigs.getByName("debug") }
+    }
     buildFeatures {
         compose = true
         buildConfig = true
