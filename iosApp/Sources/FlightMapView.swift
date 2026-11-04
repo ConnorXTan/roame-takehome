@@ -1,12 +1,15 @@
 import MapKit
 import SwiftUI
+@preconcurrency import Shared
 
 struct FlightMapView: View {
     @Environment(ExplorerModel.self) private var model
     @State private var camera: MapCameraPosition = .region(Self.world)
+    @State private var worldWidth = 800.0
+    @State private var placements: [String: MarkerPlacement] = [:]
 
     private static let world = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 25, longitude: 15),
+        center: CLLocationCoordinate2D(latitude: 20, longitude: 45),
         span: MKCoordinateSpan(latitudeDelta: 130, longitudeDelta: 300)
     )
 
@@ -23,9 +26,34 @@ struct FlightMapView: View {
         }
     }
 
+    private func labelCoordinate(_ marker: MarkerItem) -> CLLocationCoordinate2D {
+        guard let placement = placements[marker.code] else { return marker.coordinate }
+        return CLLocationCoordinate2D(latitude: placement.latitude, longitude: placement.longitude)
+    }
+
+    private func isDisplaced(_ marker: MarkerItem) -> Bool {
+        placements[marker.code]?.isDisplaced ?? false
+    }
+
     var body: some View {
+        GeometryReader { geometry in
+            content(mapWidth: geometry.size.width)
+        }
+    }
+
+    private func content(mapWidth: CGFloat) -> some View {
         ZStack(alignment: .bottom) {
             Map(position: $camera, interactionModes: [.pan, .zoom]) {
+                // Displaced labels point back to the airport they belong to.
+                ForEach(model.markers.filter(isDisplaced)) { marker in
+                    // Geodesic for the same reason as routes: MapKit can't take a longitude past 180.
+                    MapPolyline(coordinates: [marker.coordinate, labelCoordinate(marker)], contourStyle: .geodesic)
+                        .stroke(Palette.ink.opacity(0.45), lineWidth: 1)
+                    Annotation(marker.code, coordinate: marker.coordinate, anchor: .center) {
+                        Circle().fill(Palette.ink).frame(width: 5, height: 5).allowsHitTesting(false)
+                    }
+                    .annotationTitles(.hidden)
+                }
                 if let flight = model.selectedFlight {
                     // Geodesic, so routes over the antimeridian take the short way across the Pacific.
                     MapPolyline(coordinates: [flight.originCoordinate, flight.destinationCoordinate], contourStyle: .geodesic)
@@ -36,7 +64,7 @@ struct FlightMapView: View {
                     .annotationTitles(.hidden)
                 }
                 ForEach(orderedMarkers) { marker in
-                    Annotation(marker.city, coordinate: marker.coordinate, anchor: .center) {
+                    Annotation(marker.city, coordinate: labelCoordinate(marker), anchor: .center) {
                         MarkerPill(marker: marker, isHighlighted: marker.code == highlighted) {
                             model.selectDestination(marker.code)
                         }
@@ -46,9 +74,20 @@ struct FlightMapView: View {
             }
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
             .onTapGesture { model.clearSelection() }
+            // Labels re-settle once the camera stops, not on every frame of a pinch.
+            .onMapCameraChange(frequency: .onEnd) { context in
+                let next = Double(mapWidth) * MKMapSize.world.width / context.rect.width
+                if abs(next - worldWidth) / worldWidth > 0.03 || placements.isEmpty {
+                    worldWidth = next
+                    placements = model.markerPlacements(worldWidth: next)
+                }
+            }
             .accessibilityIdentifier("flight-map")
 
             overlays
+        }
+        .onChange(of: model.markers) { _, _ in
+            placements = model.markerPlacements(worldWidth: worldWidth)
         }
         .onChange(of: model.selectedFlight?.id, initial: true) { _, _ in
             guard let flight = model.selectedFlight else { return }

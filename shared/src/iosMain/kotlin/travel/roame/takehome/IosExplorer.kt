@@ -10,9 +10,10 @@ import travel.roame.takehome.db.FlightDatabase
 import travel.roame.takehome.presentation.ExplorerController
 import travel.roame.takehome.presentation.createController
 
-fun createExplorerController(baseUrl: String): ExplorerController = createController(
+fun createExplorerController(baseUrl: String, failSavedWrites: Boolean): ExplorerController = createController(
     client = HttpClient(Darwin) { configureFlightClient(this) },
     driver = NativeSqliteDriver(FlightDatabase.Schema, "flights.db"),
     baseUrl = baseUrl,
     ioDispatcher = Dispatchers.IO,
+    failSavedWrites = failSavedWrites,
 )

@@ -13,15 +13,19 @@ import travel.roame.takehome.createExplorerController
 
 /** Survives rotation, so a configuration change keeps the query, results and selection. */
 class ExplorerViewModel(application: Application) : AndroidViewModel(application) {
-    val controller = createExplorerController(application, BuildConfig.API_BASE_URL)
+    val controller = createExplorerController(application, BuildConfig.API_BASE_URL, failSavedWrites)
 
     override fun onCleared() = controller.close()
 }
+
+/** Debug QA switch: `adb shell am start ... --ez failSavedWrites true`. See the README. */
+private var failSavedWrites = false
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        failSavedWrites = BuildConfig.DEBUG && intent.getBooleanExtra("failSavedWrites", false)
         MapLibre.getInstance(this)
         setContent {
             FlightExplorerTheme { AppRoot() }

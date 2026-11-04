@@ -20,8 +20,10 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.min
+import kotlin.math.pow
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -41,6 +43,7 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import travel.roame.takehome.domain.RouteFrame
 import travel.roame.takehome.domain.compactPoints
+import travel.roame.takehome.domain.layoutMarkers
 import travel.roame.takehome.domain.routeFrame
 import travel.roame.takehome.domain.routePath
 import travel.roame.takehome.model.DestinationMarker
@@ -53,6 +56,13 @@ private const val ROUTE_SOURCE = "route"
 private const val ROUTE_LAYER = "route-line"
 private const val ENDPOINT_SOURCE = "route-endpoints"
 private const val ENDPOINT_LAYER = "route-endpoint-dots"
+private const val ANCHOR_SOURCE = "marker-anchors"
+private const val ANCHOR_LAYER = "marker-anchor-dots"
+private const val LEADER_SOURCE = "marker-leaders"
+private const val LEADER_LAYER = "marker-leader-lines"
+
+/** MapLibre draws one world this many points wide at zoom 0. */
+private const val WORLD_WIDTH_AT_ZOOM_ZERO = 512.0
 
 @Composable
 fun FlightMap(
@@ -122,6 +132,7 @@ private class MapRenderer(
     private var markers: List<DestinationMarker> = emptyList()
     private var highlighted: String? = null
     private var route: Flight? = null
+    private var laidOutZoom = -1.0
     private val addedIcons = mutableSetOf<String>()
     private val density = context.resources.displayMetrics.density
 
@@ -139,9 +150,13 @@ private class MapRenderer(
             setLogoMargins((8 * density).toInt(), (8 * density).toInt(), 0, 0)
             logoGravity = android.view.Gravity.TOP or android.view.Gravity.END
         }
-        map.cameraPosition = CameraPosition.Builder().target(LatLng(30.0, 10.0)).zoom(0.6).build()
-        map.setMinZoomPreference(0.2)
+        map.cameraPosition = CameraPosition.Builder().target(LatLng(20.0, 45.0)).zoom(0.2).build()
+        map.setMinZoomPreference(0.0)
         map.setMaxZoomPreference(10.0)
+        // Labels re-settle once the camera stops, not on every frame of a pinch.
+        map.addOnCameraIdleListener {
+            if (abs(map.cameraPosition.zoom - laidOutZoom) > 0.05) renderMarkers()
+        }
         map.addOnMapClickListener { point ->
             val screen = map.projection.toScreenLocation(point)
             val code = map.queryRenderedFeatures(screen, MARKER_LAYER).firstOrNull()?.getStringProperty("code")
@@ -155,6 +170,21 @@ private class MapRenderer(
             loaded.addSource(GeoJsonSource(ROUTE_SOURCE))
             loaded.addSource(GeoJsonSource(ENDPOINT_SOURCE))
             loaded.addSource(GeoJsonSource(MARKER_SOURCE))
+            loaded.addSource(GeoJsonSource(ANCHOR_SOURCE))
+            loaded.addSource(GeoJsonSource(LEADER_SOURCE))
+            loaded.addLayer(
+                LineLayer(LEADER_LAYER, LEADER_SOURCE).withProperties(
+                    PropertyFactory.lineColor(palette.ink),
+                    PropertyFactory.lineOpacity(0.45f),
+                    PropertyFactory.lineWidth(1f),
+                ),
+            )
+            loaded.addLayer(
+                CircleLayer(ANCHOR_LAYER, ANCHOR_SOURCE).withProperties(
+                    PropertyFactory.circleRadius(2.5f),
+                    PropertyFactory.circleColor(palette.ink),
+                ),
+            )
             loaded.addLayer(
                 LineLayer(ROUTE_LAYER, ROUTE_SOURCE).withProperties(
                     PropertyFactory.lineColor(palette.accent),
@@ -174,7 +204,7 @@ private class MapRenderer(
             loaded.addLayer(
                 SymbolLayer(MARKER_LAYER, MARKER_SOURCE).withProperties(
                     PropertyFactory.iconImage(Expression.get("icon")),
-                    // Every destination stays visible: a collision pass would silently hide airports.
+                    // layoutMarkers already keeps labels apart; a collision pass here would hide airports.
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER),
@@ -204,17 +234,32 @@ private class MapRenderer(
 
     private fun renderMarkers() {
         val style = style ?: return
-        val features = markers.map { marker ->
+        val zoom = map?.cameraPosition?.zoom ?: return
+        laidOutZoom = zoom
+        val placements = layoutMarkers(markers, WORLD_WIDTH_AT_ZOOM_ZERO * 2.0.pow(zoom)).associateBy { it.code }
+        val labels = ArrayList<Feature>(markers.size)
+        val anchors = ArrayList<Feature>()
+        val leaders = ArrayList<Feature>()
+        markers.forEach { marker ->
+            val placement = placements.getValue(marker.code)
             val selected = marker.code == highlighted
-            val iconName = iconFor(style, marker, selected)
-            Feature.fromGeometry(Point.fromLngLat(marker.longitude, marker.latitude)).apply {
+            val position = Point.fromLngLat(placement.longitude, placement.latitude)
+            labels += Feature.fromGeometry(position).apply {
                 addStringProperty("code", marker.code)
-                addStringProperty("icon", iconName)
+                addStringProperty("icon", iconFor(style, marker, selected))
                 // Higher draws on top: the selected marker first, then the cheapest.
                 addNumberProperty("rank", if (selected) 2_000_000 else 1_000_000 - marker.lowestPoints)
             }
+            if (placement.isDisplaced) {
+                val airport = Point.fromLngLat(marker.longitude, marker.latitude)
+                anchors += Feature.fromGeometry(airport)
+                val labelEnd = Point.fromLngLat(placement.leaderLongitude, placement.latitude)
+                leaders += Feature.fromGeometry(LineString.fromLngLats(listOf(airport, labelEnd)))
+            }
         }
-        style.getSourceAs<GeoJsonSource>(MARKER_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(features))
+        style.getSourceAs<GeoJsonSource>(MARKER_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(labels))
+        style.getSourceAs<GeoJsonSource>(ANCHOR_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(anchors))
+        style.getSourceAs<GeoJsonSource>(LEADER_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(leaders))
     }
 
     private fun iconFor(style: Style, marker: DestinationMarker, selected: Boolean): String {

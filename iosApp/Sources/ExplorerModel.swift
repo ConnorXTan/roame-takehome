@@ -52,6 +52,7 @@ struct MarkerItem: Identifiable, Equatable {
     let lowestPoints: Int
     let pointsLabel: String
     let coordinate: CLLocationCoordinate2D
+    let source: DestinationMarker
 
     var id: String { code }
 
@@ -62,6 +63,7 @@ struct MarkerItem: Identifiable, Equatable {
         lowestPoints = Int(marker.lowestPoints)
         pointsLabel = FormattingKt.formatPoints(points: marker.lowestPoints)
         coordinate = CLLocationCoordinate2D(latitude: marker.latitude, longitude: marker.longitude)
+        source = marker
     }
 
     var compactPointsLabel: String { FormattingKt.compactPoints(points: Int32(lowestPoints)) }
@@ -147,7 +149,13 @@ final class ExplorerModel {
     init() {
         let configured = Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
         let baseUrl = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? configured ?? "http://localhost:8080"
-        controller = IosExplorerKt.createExplorerController(baseUrl: baseUrl)
+        // Debug QA switch, set from the scheme or a UI test. See the README.
+        #if DEBUG
+        let failSavedWrites = ProcessInfo.processInfo.environment["FAIL_SAVED_WRITES"] == "1"
+        #else
+        let failSavedWrites = false
+        #endif
+        controller = IosExplorerKt.createExplorerController(baseUrl: baseUrl, failSavedWrites: failSavedWrites)
         subscription = controller.watch { [weak self] state in
             MainActor.assumeIsolated { self?.apply(state) }
         }
@@ -245,6 +253,12 @@ final class ExplorerModel {
         case .noMatches, .results:
             results.count == 1 ? "1 flight" : "\(FormattingKt.formatPoints(points: Int32(results.count))) flights"
         }
+    }
+
+    /// Where each marker's label should sit for a map showing one world `worldWidth` points across.
+    func markerPlacements(worldWidth: Double) -> [String: MarkerPlacement] {
+        let placements = MarkerLayoutKt.layoutMarkers(markers: markers.map(\.source), worldWidth: worldWidth)
+        return Dictionary(uniqueKeysWithValues: placements.map { ($0.code, $0) })
     }
 
     /// The camera region that frames a route, with the antimeridian already handled in shared code.
