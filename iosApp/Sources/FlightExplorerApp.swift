@@ -1,11 +1,14 @@
 import SwiftUI
-import Shared
 
 @main
-struct RoameStarterApp: App {
+struct FlightExplorerApp: App {
+    @State private var model = ExplorerModel()
+
     var body: some Scene {
         WindowGroup {
-            Text(Greeting().message())
+            RootView()
+                .environment(model)
+                .tint(Palette.accent)
         }
     }
 }
