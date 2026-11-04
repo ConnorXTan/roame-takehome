@@ -5,5 +5,5 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "RoameTakeHome"
-include(":shared", ":androidApp")
+rootProject.name = "FlightExplorer"
+include(":shared", ":androidApp", ":server")

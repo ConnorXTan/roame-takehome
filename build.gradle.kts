@@ -1,6 +1,9 @@
 plugins {
-    kotlin("multiplatform") version "2.4.21" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21" apply false
-    id("com.android.application") version "9.3.1" apply false
-    id("com.android.kotlin.multiplatform.library") version "9.3.1" apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.kmp.library) apply false
+    alias(libs.plugins.sqldelight) apply false
 }
