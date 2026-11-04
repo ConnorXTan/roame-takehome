@@ -66,6 +66,26 @@ final class FlightExplorerUITests: XCTestCase {
         XCTAssertEqual(origin.value as? String, "From · City or airport", "Reset should clear the field")
     }
 
+    func testNewResultsStartAtTheTop() {
+        launch()
+        waitForCount("1,000 flights")
+        let firstRow = any("results-list").cells.element(boundBy: 0)
+        let firstRowTop = firstRow.frame.minY
+        any("results-list").swipeUp()
+        any("results-list").swipeUp()
+        snapshot("02b-scrolled")
+
+        let origin = app.textFields["origin-field"]
+        origin.tap()
+        origin.typeText("Seattle")
+        XCTAssertNotEqual(resultCount.label, "1,000 flights")
+        app.buttons["reset-filters"].tap()
+        waitForCount("1,000 flights")
+
+        XCTAssertTrue(app.staticTexts["Toronto to Barcelona"].waitForExistence(timeout: 3), "the list should be back at the top")
+        XCTAssertEqual(firstRow.frame.minY, firstRowTop, accuracy: 2)
+    }
+
     func testFiltersCombineAndShowAsChips() {
         launch()
         waitForCount("1,000 flights")

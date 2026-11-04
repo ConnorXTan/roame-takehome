@@ -97,6 +97,17 @@ fun ExploreScreen(state: ExplorerState, controller: ExplorerController, visible:
     val listState = rememberLazyListState()
     val focus = LocalFocusManager.current
 
+    // New search or filters start from the top; left alone, the list would anchor to whichever keyed
+    // row was visible and land mid-way through the new results. A plain refresh doesn't move it. This
+    // lives here, not in the list, because the list leaves composition when nothing matches.
+    var shownQuery by remember { mutableStateOf(state.query) }
+    LaunchedEffect(state.resultsRevision) {
+        if (state.query != shownQuery) {
+            shownQuery = state.query
+            listState.scrollToItem(0)
+        }
+    }
+
     fun switchTo(next: DiscoveryMode) {
         focus.clearFocus()
         if (next == DiscoveryMode.MAP) mapRequested = true
@@ -230,6 +241,7 @@ private fun SearchHeader(
                     label = "From",
                     placeholder = "City or airport",
                     value = state.query.originText,
+                    latestValue = { controller.state.value.query.originText },
                     onValueChange = controller::setOriginText,
                     imeAction = ImeAction.Next,
                 )
@@ -239,6 +251,7 @@ private fun SearchHeader(
                     label = "To",
                     placeholder = "City or airport",
                     value = state.query.destinationText,
+                    latestValue = { controller.state.value.query.destinationText },
                     onValueChange = controller::setDestinationText,
                     imeAction = ImeAction.Done,
                 )
@@ -332,6 +345,7 @@ private fun PlaceField(
     label: String,
     placeholder: String,
     value: String,
+    latestValue: () -> String,
     onValueChange: (String) -> Unit,
     imeAction: ImeAction,
 ) {
@@ -339,8 +353,13 @@ private fun PlaceField(
     val focus = LocalFocusManager.current
     // Text lives locally so the caret never waits on a round trip through shared state. It follows
     // shared state only when that disagrees, which is what lets Reset and the chips clear the field.
+    // That check reads the controller, not `value`: `value` trails by a frame, so comparing against
+    // it would overwrite the field with an older string and lose keystrokes while typing quickly.
     var text by remember { mutableStateOf(value) }
-    LaunchedEffect(value) { if (value != text) text = value }
+    LaunchedEffect(value) {
+        val latest = latestValue()
+        if (latest != text) text = latest
+    }
 
     Row(Modifier.fillMaxWidth().height(46.dp).padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = colors.muted, modifier = Modifier.size(18.dp))

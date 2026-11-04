@@ -283,6 +283,14 @@ private struct ResultsList: View {
     let refresh: () async -> Void
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list.onChange(of: model.newResultsToken) { _, _ in
+                if let first = model.results.first { proxy.scrollTo(first.id, anchor: .top) }
+            }
+        }
+    }
+
+    private var list: some View {
         List(model.results) { flight in
             FlightRow(
                 flight: flight,

@@ -105,6 +105,7 @@ final class ExplorerModel {
     @ObservationIgnored private var subscription: (any Subscription)?
     @ObservationIgnored private var resultsRevision: Int32 = -1
     @ObservationIgnored private var savedRevision: Int32 = -1
+    @ObservationIgnored private var shownQuery: FlightQuery?
 
     private(set) var phase = ContentPhase.loading
     private(set) var isRefreshing = false
@@ -113,6 +114,8 @@ final class ExplorerModel {
     private(set) var lastUpdatedLabel: String?
 
     private(set) var results: [FlightItem] = []
+    /// Bumped when a new search or filter lands, so the list can return to the top. A plain refresh doesn't.
+    private(set) var newResultsToken = 0
     private(set) var markers: [MarkerItem] = []
     private(set) var selectedFlight: FlightItem?
     private(set) var selectedDestination: MarkerItem?
@@ -173,6 +176,10 @@ final class ExplorerModel {
         if state.resultsRevision != resultsRevision {
             resultsRevision = state.resultsRevision
             results = state.results.map(FlightItem.init)
+            if shownQuery != state.query {
+                shownQuery = state.query
+                newResultsToken += 1
+            }
         }
         if state.savedRevision != savedRevision {
             savedRevision = state.savedRevision
