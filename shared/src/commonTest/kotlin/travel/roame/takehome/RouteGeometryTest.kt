@@ -3,11 +3,15 @@ package travel.roame.takehome
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import travel.roame.takehome.domain.GeoPoint
 import travel.roame.takehome.domain.greatCirclePath
+import travel.roame.takehome.domain.markersFrame
 import travel.roame.takehome.domain.normalizeLongitude
 import travel.roame.takehome.domain.routeFrame
+import travel.roame.takehome.model.DestinationMarker
 
 class RouteGeometryTest {
     private val vancouver = GeoPoint(49.19, -123.18)
@@ -51,6 +55,29 @@ class RouteGeometryTest {
         val frame = routeFrame(greatCirclePath(vancouver, sydney))
         assertTrue(abs(frame.centerLongitude) > 120, "centred on ${frame.centerLongitude}, the wrong side of the world")
         assertTrue(frame.longitudeSpan < 180, "span ${frame.longitudeSpan} should be the short way across")
+    }
+
+    private fun marker(code: String, latitude: Double, longitude: Double) =
+        DestinationMarker(code, code, latitude, longitude, flightCount = 1, lowestPoints = 1_000)
+
+    @Test
+    fun noMarkersHaveNoFrame() {
+        assertNull(markersFrame(emptyList()))
+    }
+
+    @Test
+    fun aSingleMarkerGetsARegionalFrameCentredOnIt() {
+        val frame = assertNotNull(markersFrame(listOf(marker("HND", 35.55, 139.79))))
+        assertEquals(35.55, frame.centerLatitude, 1e-6)
+        assertEquals(139.79, frame.centerLongitude, 1e-6)
+        assertEquals(30.0, frame.longitudeSpan, 1e-6)
+    }
+
+    @Test
+    fun markersEitherSideOfThePacificFrameTheShortWay() {
+        val frame = assertNotNull(markersFrame(listOf(marker("AKL", -37.0, 174.8), marker("HNL", 21.3, -157.9))))
+        assertTrue(abs(frame.centerLongitude) > 150, "centred on ${frame.centerLongitude}, the wrong side of the world")
+        assertTrue(frame.longitudeSpan < 60, "span ${frame.longitudeSpan} should cross the Pacific, not the Atlantic")
     }
 
     @Test

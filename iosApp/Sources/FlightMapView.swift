@@ -8,9 +8,11 @@ struct FlightMapView: View {
     @State private var worldWidth = 800.0
     @State private var placements: [String: MarkerPlacement] = [:]
 
-    /// A camera distance, not a region: MapKit clamps a world-sized region to much closer in.
+    /// MapKit won't zoom a flat map out past about 120 degrees on a portrait phone, so the world can't
+    /// fit. This centres the densest part of the network; panning reaches the rest, and a search that
+    /// narrows the results moves the camera to them.
     private static let world = MapCamera(
-        centerCoordinate: CLLocationCoordinate2D(latitude: 15, longitude: 40),
+        centerCoordinate: CLLocationCoordinate2D(latitude: 15, longitude: 36),
         distance: 60_000_000
     )
 
@@ -95,8 +97,11 @@ struct FlightMapView: View {
 
             overlays
         }
-        .onChange(of: model.markers) { _, _ in
+        .onChange(of: model.markers) { old, new in
             placements = model.markerPlacements(worldWidth: worldWidth)
+            // A narrow search shouldn't leave its only markers off screen and the map looking empty.
+            guard old.map(\.code) != new.map(\.code), model.selectedFlight == nil, let region = model.markersRegion else { return }
+            withAnimation(.easeInOut(duration: 0.45)) { camera = .region(region) }
         }
         .onChange(of: model.selectedFlight?.id, initial: true) { _, _ in
             guard let flight = model.selectedFlight else { return }

@@ -112,7 +112,7 @@ final class FlightExplorerUITests: XCTestCase {
         launch()
         waitForCount("1,000 flights")
         openMap()
-        let marker = any("marker-GRU")
+        let marker = any("marker-JNB")
         let found = marker.waitForExistence(timeout: 10)
         snapshot("07-map")
         dumpTree("07-map")
@@ -145,6 +145,20 @@ final class FlightExplorerUITests: XCTestCase {
         map.pinch(withScale: 0.3, velocity: -2)
         snapshot("07b-zoomed-out")
         dumpTree("07b-zoomed-out")
+    }
+
+    func testNarrowSearchBringsItsMarkersIntoView() {
+        launch()
+        waitForCount("1,000 flights")
+        openMap()
+        XCTAssertTrue(any("marker-JNB").waitForExistence(timeout: 10))
+        XCTAssertFalse(any("marker-SYD").exists, "Sydney starts off screen, which is the point of this test")
+
+        let destination = app.textFields["destination-field"]
+        destination.tap()
+        destination.typeText("Sydney")
+        XCTAssertTrue(any("marker-SYD").waitForExistence(timeout: 5), "the camera should move to the only result")
+        snapshot("07c-sydney")
     }
 
     func testSavingAppearsInSavedAndRemoveTakesItAway() {

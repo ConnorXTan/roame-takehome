@@ -263,7 +263,15 @@ final class ExplorerModel {
 
     /// The camera region that frames a route, with the antimeridian already handled in shared code.
     func routeRegion(for flight: FlightItem) -> MKCoordinateRegion {
-        let frame = RouteGeometryKt.routeFrame(flight: flight.source)
+        region(for: RouteGeometryKt.routeFrame(flight: flight.source))
+    }
+
+    /// The camera region that frames the current results, if there are any.
+    var markersRegion: MKCoordinateRegion? {
+        RouteGeometryKt.markersFrame(markers: markers.map(\.source), margin: 1.5).map(region(for:))
+    }
+
+    private func region(for frame: RouteFrame) -> MKCoordinateRegion {
         let latitude = min(max(frame.centerLatitude, -80), 80)
         let maxSpan = (90 - abs(latitude)) * 2 - 1
         return MKCoordinateRegion(

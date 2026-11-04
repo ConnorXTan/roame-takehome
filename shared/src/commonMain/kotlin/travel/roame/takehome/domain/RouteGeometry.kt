@@ -9,6 +9,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
+import travel.roame.takehome.model.DestinationMarker
 import travel.roame.takehome.model.Flight
 
 data class GeoPoint(val latitude: Double, val longitude: Double)
@@ -79,6 +80,36 @@ fun routeFrame(path: List<GeoPoint>, margin: Double = 1.35): RouteFrame {
 }
 
 fun routeFrame(flight: Flight): RouteFrame = routeFrame(routePath(flight))
+
+/**
+ * Frames a set of airports. The largest empty stretch of longitude is the part left out of view, so
+ * a set spanning the Pacific comes out as one tight group rather than the whole world the wrong way.
+ * Used when results change, because otherwise a narrow search can leave the map looking empty.
+ */
+fun markersFrame(markers: List<DestinationMarker>, margin: Double = 1.5): RouteFrame? {
+    if (markers.isEmpty()) return null
+    val longitudes = markers.map { it.longitude }.sorted()
+    var west = longitudes.first()
+    var largestGap = longitudes.first() + 360.0 - longitudes.last()
+    longitudes.zipWithNext().forEach { (a, b) ->
+        if (b - a > largestGap) {
+            largestGap = b - a
+            west = b
+        }
+    }
+    val longitudeExtent = 360.0 - largestGap
+    val south = markers.minOf { it.latitude }
+    val north = markers.maxOf { it.latitude }
+    return RouteFrame(
+        centerLatitude = (south + north) / 2,
+        centerLongitude = normalizeLongitude(west + longitudeExtent / 2),
+        latitudeSpan = min(150.0, max(MINIMUM_MARKER_SPAN, (north - south) * margin)),
+        longitudeSpan = min(340.0, max(MINIMUM_MARKER_SPAN, longitudeExtent * margin)),
+    )
+}
+
+/** Wide enough that a single airport still shows where in the world it is. */
+private const val MINIMUM_MARKER_SPAN = 30.0
 
 fun normalizeLongitude(longitude: Double): Double {
     var value = longitude

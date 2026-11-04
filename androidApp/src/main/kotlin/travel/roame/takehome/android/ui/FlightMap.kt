@@ -44,6 +44,7 @@ import org.maplibre.geojson.Point
 import travel.roame.takehome.domain.RouteFrame
 import travel.roame.takehome.domain.compactPoints
 import travel.roame.takehome.domain.layoutMarkers
+import travel.roame.takehome.domain.markersFrame
 import travel.roame.takehome.domain.routeFrame
 import travel.roame.takehome.domain.routePath
 import travel.roame.takehome.model.DestinationMarker
@@ -222,9 +223,12 @@ private class MapRenderer(
     }
 
     fun showMarkers(next: List<DestinationMarker>, highlight: String?) {
+        val resultsMoved = next.map { it.code } != markers.map { it.code }
         markers = next
         highlighted = highlight
         renderMarkers()
+        // A narrow search shouldn't leave its only markers off screen and the map looking empty.
+        if (resultsMoved && route == null) markersFrame(next)?.let { frame(it, animate = true, clearsBottomCard = false) }
     }
 
     fun showRoute(flight: Flight?) {
@@ -324,10 +328,10 @@ private class MapRenderer(
                 ),
             ),
         )
-        frame(routeFrame(path), animate)
+        frame(routeFrame(path), animate, clearsBottomCard = true)
     }
 
-    private fun frame(frame: RouteFrame, animate: Boolean) {
+    private fun frame(frame: RouteFrame, animate: Boolean, clearsBottomCard: Boolean) {
         val map = map ?: return
         // A centre and zoom instead of LatLngBounds, which can't express a route over the antimeridian.
         val widthDp = map.width / density
@@ -336,7 +340,8 @@ private class MapRenderer(
         val byHeight = ln(heightDp * 170.0 / (frame.latitudeSpan * 512.0)) / ln(2.0)
         val zoom = min(byWidth, byHeight).coerceIn(0.2, 6.0)
         // Nudged south so the route sits in the part of the map the bottom card doesn't cover.
-        val target = LatLng((frame.centerLatitude - frame.latitudeSpan * 0.18).coerceIn(-80.0, 80.0), frame.centerLongitude)
+        val nudge = if (clearsBottomCard) frame.latitudeSpan * 0.18 else 0.0
+        val target = LatLng((frame.centerLatitude - nudge).coerceIn(-80.0, 80.0), frame.centerLongitude)
         val update = CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(target).zoom(zoom).build())
         if (animate) map.easeCamera(update, 450) else map.moveCamera(update)
     }
