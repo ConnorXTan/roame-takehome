@@ -149,6 +149,23 @@ class ExplorerControllerTest {
     }
 
     @Test
+    fun theStaleMarkStaysWhileARetryRuns() = runTest {
+        val api = FakeApi(flights).apply { failUnreachable() }
+        val controller = controller(api, FakeStore(FlightSnapshot(flights, FixedClock.now())))
+        advanceUntilIdle()
+        api.gate = CompletableDeferred()
+        controller.refresh()
+        runCurrent()
+        assertTrue(controller.state.value.isRefreshing)
+        assertTrue(controller.state.value.isStale, "the banner should stay up and say it is checking")
+        api.failure = null
+        api.gate?.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(controller.state.value.isStale)
+        controller.close()
+    }
+
+    @Test
     fun aSuccessfulEmptyResponseIsNotAnError() = runTest {
         val controller = controller(FakeApi(emptyList()))
         advanceUntilIdle()
@@ -574,6 +591,28 @@ class ExplorerControllerTest {
         val controller = ExplorerController(FlightRepository(FakeApi(), FakeStore(), FixedClock), dispatcher, dispatcher) { closed = true }
         advanceUntilIdle()
         controller.close()
+        advanceUntilIdle()
+        assertTrue(closed)
+    }
+
+    @Test
+    fun closingWaitsForAWriteInProgressBeforeReleasingResources() = runTest {
+        var closed = false
+        val gate = CompletableDeferred<Unit>()
+        val store = FakeStore().apply {
+            writeGate = gate
+            writesAreUninterruptible = true
+        }
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val controller = ExplorerController(FlightRepository(FakeApi(), store, FixedClock), dispatcher, dispatcher) { closed = true }
+        advanceUntilIdle()
+        controller.save(london)
+        runCurrent()
+        controller.close()
+        advanceUntilIdle()
+        assertFalse(closed, "the database must stay open until the write has finished")
+        gate.complete(Unit)
+        advanceUntilIdle()
         assertTrue(closed)
     }
 }

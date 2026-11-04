@@ -62,6 +62,9 @@ private const val ANCHOR_LAYER = "marker-anchor-dots"
 private const val LEADER_SOURCE = "marker-leaders"
 private const val LEADER_LAYER = "marker-leader-lines"
 
+/** Enough to keep recent labels for quick reuse, while bounding what the style holds on to. */
+private const val MAX_CACHED_ICONS = 120
+
 /** MapLibre draws one world this many points wide at zoom 0. */
 private const val WORLD_WIDTH_AT_ZOOM_ZERO = 512.0
 
@@ -264,6 +267,15 @@ private class MapRenderer(
         style.getSourceAs<GeoJsonSource>(MARKER_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(labels))
         style.getSourceAs<GeoJsonSource>(ANCHOR_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(anchors))
         style.getSourceAs<GeoJsonSource>(LEADER_SOURCE)?.setGeoJson(FeatureCollection.fromFeatures(leaders))
+        trimIcons(style, inUse = labels.mapTo(mutableSetOf()) { it.getStringProperty("icon") })
+    }
+
+    /** Dragging the points slider makes a new image per marker per step, so these can't just accumulate. */
+    private fun trimIcons(style: Style, inUse: Set<String>) {
+        if (addedIcons.size <= MAX_CACHED_ICONS) return
+        val stale = addedIcons - inUse
+        stale.forEach(style::removeImage)
+        addedIcons -= stale
     }
 
     private fun iconFor(style: Style, marker: DestinationMarker, selected: Boolean): String {

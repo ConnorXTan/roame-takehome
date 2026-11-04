@@ -3,8 +3,10 @@ package travel.roame.takehome
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import travel.roame.takehome.data.FlightApi
 import travel.roame.takehome.data.FlightApiException
@@ -60,6 +62,9 @@ class FakeStore(var snapshot: FlightSnapshot? = null) : FlightStore {
     var failSavedWrites = false
     var saveCalls = 0
 
+    /** Makes [writeGate] ignore cancellation, the way a real SQLite write can't be interrupted. */
+    var writesAreUninterruptible = false
+
     /** When set, saved-flight writes hang until this completes. */
     var writeGate: CompletableDeferred<Unit>? = null
 
@@ -77,7 +82,9 @@ class FakeStore(var snapshot: FlightSnapshot? = null) : FlightStore {
 
     override suspend fun saveFlight(flight: Flight, savedAt: Instant) {
         saveCalls++
-        writeGate?.await()
+        writeGate?.let { gate ->
+            if (writesAreUninterruptible) withContext(NonCancellable) { gate.await() } else gate.await()
+        }
         if (failSavedWrites) throw IllegalStateException("disk full")
         saved.value = saved.value.filterNot { it.id == flight.id } + flight
     }

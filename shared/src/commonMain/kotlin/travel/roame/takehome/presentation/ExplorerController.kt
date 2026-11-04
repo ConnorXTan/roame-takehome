@@ -4,8 +4,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -185,9 +185,11 @@ class ExplorerController(
         _state.update { it.copy(message = null) }
     }
 
+    /** Cancels everything, then releases resources only once any write in progress has finished. */
     fun close() {
-        scope.cancel()
-        onClose()
+        val job = scope.coroutineContext[Job]
+        job?.invokeOnCompletion { onClose() }
+        job?.cancel()
     }
 
     // Internals
@@ -314,10 +316,12 @@ class ExplorerController(
         options: FilterOptions,
     ): ExplorerState {
         val failure = (status as? RefreshStatus.Failed)?.reason
+        val refreshing = status == RefreshStatus.Refreshing
         return copy(
-            isRefreshing = status == RefreshStatus.Refreshing,
+            isRefreshing = refreshing,
             failureMessage = failure?.let(::describe),
-            isStale = snapshot != null && failure != null,
+            // A retry in progress hasn't made the data any fresher, so it stays marked as stale.
+            isStale = snapshot != null && (failure != null || (refreshing && isStale)),
             lastUpdatedLabel = snapshot?.let { lastUpdatedLabel(it.fetchedAt) },
             totalFlightCount = snapshot?.flights?.size ?: 0,
             options = options,
