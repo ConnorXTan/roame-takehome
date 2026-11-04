@@ -10,13 +10,16 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.FlightExplorer">
-        <!-- Compose handles these without a restart. Rebuilding the activity would rebuild the native
-             map on every rotation, which loses the camera and, measured here, ~4 MB of native heap
-             each time. uiMode is left out so a theme switch still restarts into the matching map style. -->
+        <!-- Portrait on phones, where landscape leaves no height for results. Android ignores this on
+             large screens, so configChanges still matters: Compose handles these without a restart,
+             while rebuilding the activity would rebuild the native map, losing the camera and, as
+             measured, ~4 MB of native heap each time. uiMode is left out so that a theme switch still
+             restarts into the matching map style. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
