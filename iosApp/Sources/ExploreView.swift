@@ -107,7 +107,7 @@ struct ExploreView: View {
             }
         }
         .padding(.horizontal, 14)
-        .frame(height: 44)
+        .frame(minHeight: 44)
     }
 
     private var filterButton: some View {

@@ -3,6 +3,7 @@ import SwiftUI
 struct FiltersSheet: View {
     @Environment(ExplorerModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private static let pointsStep = 500.0
 
@@ -83,12 +84,27 @@ struct FiltersSheet: View {
         )
         return VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Departure dates")
-            DatePicker("From", selection: start, in: bounds, displayedComponents: .date)
-                .accessibilityIdentifier("date-start")
-            DatePicker("To", selection: end, in: bounds, displayedComponents: .date)
-                .accessibilityIdentifier("date-end")
+            datePicker("From", selection: start, in: bounds, id: "date-start")
+            datePicker("To", selection: end, in: bounds, id: "date-end")
         }
         .foregroundStyle(Palette.ink)
+    }
+
+    /// The label goes above the control at accessibility sizes, where side by side it would wrap
+    /// a letter at a time.
+    @ViewBuilder
+    private func datePicker(_ title: String, selection: Binding<Date>, in bounds: ClosedRange<Date>, id: String) -> some View {
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).fixedSize()
+                DatePicker(title, selection: selection, in: bounds, displayedComponents: .date)
+                    .labelsHidden()
+                    .accessibilityIdentifier(id)
+            }
+        } else {
+            DatePicker(title, selection: selection, in: bounds, displayedComponents: .date)
+                .accessibilityIdentifier(id)
+        }
     }
 
     private var cabinSection: some View {

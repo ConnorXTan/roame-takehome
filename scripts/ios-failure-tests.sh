@@ -2,8 +2,8 @@
 # Runs the iOS UI suite including the failure-mode tests, which need a server per failure mode.
 # Usage: scripts/ios-failure-tests.sh [simulator name]   (default: iPhone 17 Pro)
 #
-# Port 8080 serves the fixture, 8091 an empty list, 8092 HTTP 500 and 8093 malformed JSON. Port 8094
-# stays down until the retry test has seen its error screen, and only then comes up.
+# Port 8080 serves the fixture, 8091 an empty list, 8092 HTTP 500, 8093 malformed JSON and 8095 the
+# fixture after a delay. Port 8094 stays down until the retry test has seen its error screen.
 set -eu
 cd "$(dirname "$0")/.."
 simulator="${1:-iPhone 17 Pro}"
@@ -31,11 +31,12 @@ start normal 8080
 start empty 8091
 start error 8092
 start malformed 8093
+start slow 8095
 
 # Every test depends on these, so stop now with the real cause rather than time out sixteen times.
-for port in 8080 8091 8092 8093; do
+for port in 8080 8091 8092 8093 8095; do
     tries=0
-    until curl -s -o /dev/null -m 1 "http://localhost:$port/flights"; do
+    until curl -s -o /dev/null -m 6 "http://localhost:$port/flights"; do
         tries=$((tries + 1))
         if [ "$tries" -ge 30 ]; then
             echo "Server on port $port did not start:" >&2

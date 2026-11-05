@@ -56,6 +56,7 @@ struct SaveIconButton: View {
 }
 
 struct FlightRow: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let flight: FlightItem
     let isSelected: Bool
     let isSaved: Bool
@@ -63,34 +64,30 @@ struct FlightRow: View {
     let onToggleSaved: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(flight.origin).font(.headline)
-                    RouteConnector(planeSize: 11).frame(width: 34)
-                    Text(flight.destination).font(.headline)
+        Group {
+            // Side by side there's no room at accessibility sizes: codes and prices would wrap a
+            // letter at a time. Stacked, every line gets the full width.
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    route
+                    details
+                    HStack {
+                        price(alignment: .leading)
+                        Spacer(minLength: 4)
+                        saveButton
+                    }
                 }
-                .foregroundStyle(Palette.ink)
-                Text("\(flight.originCity) to \(flight.destinationCity)")
-                    .font(.footnote)
-                    .foregroundStyle(Palette.muted)
-                    .lineLimit(1)
-                Text("\(flight.departureRowLabel) · \(flight.cabin)")
-                    .font(.footnote)
-                    .foregroundStyle(Palette.muted)
-                    .lineLimit(1)
+            } else {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        route
+                        details
+                    }
+                    Spacer(minLength: 4)
+                    price(alignment: .trailing)
+                    saveButton
+                }
             }
-            Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(flight.pointsLabel)
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(Palette.ink)
-                Text(flight.program)
-                    .font(.footnote)
-                    .foregroundStyle(Palette.muted)
-                    .lineLimit(1)
-            }
-            SaveIconButton(flight: flight, isSaved: isSaved, isPending: isPending, action: onToggleSaved)
         }
         .padding(.leading, 14)
         .padding(.trailing, 2)
@@ -104,10 +101,48 @@ struct FlightRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("flight-\(flight.id)")
     }
+
+    private var route: some View {
+        HStack(spacing: 6) {
+            Text(flight.origin).font(.headline).fixedSize()
+            RouteConnector(planeSize: 11).frame(width: 34)
+            Text(flight.destination).font(.headline).fixedSize()
+        }
+        .foregroundStyle(Palette.ink)
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(flight.originCity) to \(flight.destinationCity)")
+            Text("\(flight.departureRowLabel) · \(flight.cabin)")
+        }
+        .font(.footnote)
+        .foregroundStyle(Palette.muted)
+        // Wraps rather than truncates: the destination and cabin are what people scan rows for.
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func price(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 3) {
+            Text(flight.pointsLabel)
+                .font(.headline.monospacedDigit())
+                .foregroundStyle(Palette.ink)
+                .fixedSize()
+            Text(flight.program)
+                .font(.footnote)
+                .foregroundStyle(Palette.muted)
+                .fixedSize()
+        }
+    }
+
+    private var saveButton: some View {
+        SaveIconButton(flight: flight, isSaved: isSaved, isPending: isPending, action: onToggleSaved)
+    }
 }
 
 /// The selected flight's details, shared by the list, the map and the saved screen.
 struct FlightCard<Secondary: View>: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let flight: FlightItem
     let isSaved: Bool
     let isPending: Bool
@@ -116,11 +151,34 @@ struct FlightCard<Secondary: View>: View {
     @ViewBuilder var secondary: () -> Secondary
 
     var body: some View {
+        Group {
+            // Scrolls when it can't fit. Left to grow, a card taller than the space pushes the whole
+            // screen up under the status bar.
+            if typeSize.isAccessibilitySize {
+                ViewThatFits(in: .vertical) {
+                    details
+                    ScrollView { details }
+                }
+            } else {
+                details
+            }
+        }
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.hairline)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 18, y: 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("flight-card")
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(flight.departureLabel)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button(action: onClose) {
                     Image(systemName: "xmark")
@@ -147,46 +205,58 @@ struct FlightCard<Secondary: View>: View {
             }
             .font(.footnote)
             .foregroundStyle(Palette.muted)
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(flight.pointsLabel)
-                            .font(.title2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(Palette.ink)
-                        Text("pts").font(.footnote).foregroundStyle(Palette.muted)
-                    }
-                    Text("\(flight.cabin) · \(flight.program)")
-                        .font(.footnote)
-                        .foregroundStyle(Palette.muted)
+            // Stacked at accessibility sizes, where the price and the button can't share a line.
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    priceSummary
+                    saveButton
                 }
-                Spacer()
-                Button(action: onToggleSaved) {
-                    HStack(spacing: 6) {
-                        if isPending { ProgressView().controlSize(.small) }
-                        Text(isSaved ? "Remove" : "Save").fontWeight(.semibold)
-                    }
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 11)
-                    .foregroundStyle(isSaved ? Palette.ink : Palette.onAccent)
-                    .background(isSaved ? Palette.canvas : Palette.accent, in: Capsule())
+                .padding(.top, 14)
+            } else {
+                HStack(alignment: .center) {
+                    priceSummary
+                    Spacer()
+                    saveButton
                 }
-                .buttonStyle(.plain)
-                .disabled(isPending)
-                .accessibilityIdentifier("card-save")
+                .padding(.top, 14)
             }
-            .padding(.top, 14)
             secondary()
         }
         .padding(.horizontal, 18)
         .padding(.top, 12)
         .padding(.bottom, 16)
-        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.hairline)
+    }
+
+    private var priceSummary: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(flight.pointsLabel)
+                    .font(.title2.weight(.bold).monospacedDigit())
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize()
+                Text("pts").font(.footnote).foregroundStyle(Palette.muted).fixedSize()
+            }
+            Text("\(flight.cabin) · \(flight.program)")
+                .font(.footnote)
+                .foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .shadow(color: .black.opacity(0.16), radius: 18, y: 6)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("flight-card")
+    }
+
+    private var saveButton: some View {
+        Button(action: onToggleSaved) {
+            HStack(spacing: 6) {
+                if isPending { ProgressView().controlSize(.small) }
+                Text(isSaved ? "Remove" : "Save").fontWeight(.semibold)
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 11)
+            .foregroundStyle(isSaved ? Palette.ink : Palette.onAccent)
+            .background(isSaved ? Palette.canvas : Palette.accent, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isPending)
+        .accessibilityIdentifier("card-save")
     }
 }
 
@@ -249,25 +319,28 @@ struct MessageState: View {
 /// Skeleton rows for the first load, so the layout doesn't jump when results arrive.
 struct LoadingRows: View {
     var body: some View {
-        VStack(spacing: 10) {
-            ForEach(0..<7, id: \.self) { _ in
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        bar(width: 120, height: 16)
-                        bar(width: 180, height: 12)
-                        bar(width: 150, height: 12)
+        // In a ScrollView so the rows take the space they're offered. As a plain stack their fixed
+        // heights overflow the screen and push the search header up under the status bar.
+        ScrollView {
+            VStack(spacing: 10) {
+                ForEach(0..<7, id: \.self) { _ in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            bar(width: 120, height: 16)
+                            bar(width: 180, height: 12)
+                            bar(width: 150, height: 12)
+                        }
+                        Spacer()
+                        bar(width: 56, height: 16)
                     }
-                    Spacer()
-                    bar(width: 56, height: 16)
+                    .padding(14)
+                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .padding(14)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            Spacer()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollDisabled(true)
         .background(Palette.canvas)
         .accessibilityElement()
         .accessibilityLabel("Loading flights")
