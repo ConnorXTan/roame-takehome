@@ -22,7 +22,7 @@ scripts/     ios-failure-tests.sh
   put the SDK path in `local.properties` as `sdk.dir=...`.
 - Xcode 26.4 or newer, with an iPhone simulator.
 
-First builds need internet access. Map tiles need it at runtime too. Nothing else needs an API key.
+First builds need internet access, and map tiles need it at runtime. No API keys are required.
 
 If `java` isn't on your `PATH`, set `JAVA_HOME` first. With Homebrew's JDK:
 
@@ -50,7 +50,9 @@ To see the failure states, start it in a failure mode:
 
 ## Run the apps
 
-**Android:** open the project in Android Studio and run `androidApp` on an emulator, or:
+### Android
+
+Open the project in Android Studio and run `androidApp` on an emulator, or:
 
 ```sh
 ./gradlew :androidApp:installDebug
@@ -70,7 +72,9 @@ the debug key, so it needs no setup:
 On a physical device, pass your computer's address to a debug build, which allows plain HTTP to any
 host: `./gradlew :androidApp:installDebug -PapiBaseUrl=http://192.168.1.20:8080`.
 
-**iOS:** open `iosApp/RoameStarter.xcodeproj`, choose the `RoameStarter` scheme and an iPhone simulator,
+### iOS
+
+Open `iosApp/RoameStarter.xcodeproj`, choose the `RoameStarter` scheme and an iPhone simulator,
 and run. Xcode builds the shared framework itself. An initial "No such module 'Shared'" editor error
 clears after the first build. On a physical device, set `API_BASE_URL` in the scheme's environment.
 
