@@ -95,6 +95,10 @@ permission before its first fetch, and explains itself if denied.
   change still does, and so does reopening the activity.
 - **Android UI checks are not automated.** iOS has an XCUITest suite; Android was driven by scripted
   adb sessions, which aren't in the repo.
+- **Android has only been run on API 37.** `minSdk` is still the starter's 23, and the code avoids
+  newer SQLite syntax for it, but nothing below 37 has actually been launched.
+- **Android map markers aren't exposed to TalkBack,** because they are bitmaps in a map layer. The list
+  shows the same results and is fully labelled, so screen reader users should use that view.
 - **Map tiles need a network connection** and come from OpenFreeMap, a free public service with no
   uptime guarantee. A production app would want its own tile provider.
 - **There are no database migrations yet.** The schema is at its first version.
@@ -110,7 +114,7 @@ software rendering), Apple M5. Built from the command line; the project was not 
 | --- | --- |
 | Shared logic on the JVM, including the real 1,000-flight fixture | 147 passing |
 | Shared logic on the iOS simulator, on native SQLite | 138 passing |
-| iOS UI tests against live servers, including every failure mode | 20 passing |
+| iOS UI tests against live servers, including every failure mode | 23 passing |
 | Local API | 3 passing |
 
 To check that the tests can actually fail, 25 deliberate bugs were introduced into the shared code one
@@ -144,6 +148,15 @@ Feb 3 to Feb 5 gives 41.
 | Failed save stays unsaved and says so | ✓ | ✓ |
 | Dark mode | ✓ | ✓ |
 | Local network permission denied, then granted in Settings | n/a | ✓ |
+| Points slider matches the fixture at each position, limit included | ✓ | ✓ |
+| Server that hangs: stale banner, or an error with no cache, after the timeout | ✓ | ✓ |
+| Connection cut mid-response, and a 200 HTML page, keep cached data | ✓ | ✓ |
+| Largest text size stays readable | ✓ | ✓ |
+| Smallest screens tried (iPhone 17e, 360×640dp Android) | ✓ | ✓ |
+| Process killed in the background, then reopened | not run | ✓ |
+
+A fresh clone from GitHub also builds for Android (debug and release) and iOS, with `JAVA_HOME` unset
+for the iOS build as if opened straight in Xcode. On iPad, the list screen was checked at launch only.
 
 ### Performance and memory
 
@@ -163,6 +176,11 @@ substantially. The iOS figures are from a debug build.
 
 Fixed along the way, listed because they show what the tests above were worth:
 
+- At iOS accessibility text sizes, flight rows split codes and prices a letter at a time, the card
+  truncated the price to "1…", and tall cards pushed the search header up under the status bar.
+- The iOS search header sat under the status bar during every first load, because the skeleton rows
+  overflowed the screen. This was on screen in an earlier check and was wrongly dismissed as animation.
+- The card covered most of the route on small Android screens.
 - Tapping an empty part of the Android Saved tab could save an invisible flight, because Explore stays
   composed underneath and transparency doesn't stop input. Dragging there panned the hidden map too.
 - Typing quickly on Android dropped characters, because the field compared itself to state a frame old.
