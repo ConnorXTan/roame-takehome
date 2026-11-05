@@ -147,6 +147,9 @@ Feb 3 to Feb 5 gives 41.
 
 ### Performance and memory
 
+Measured during development, shortly before the final review fixes, which didn't change these paths
+substantially. The iOS figures are from a debug build.
+
 | Measurement | Result |
 | --- | --- |
 | iOS, main-thread cost of applying 1,000 results (debug build) | 8ms median, 10ms p95, 20ms max |
@@ -183,8 +186,9 @@ Its output was checked by running it, not by trusting it:
   step. Most of the bugs above came out of that.
 - Claims were tested against something independent of the code that made them: fixture counts computed
   separately, deliberate mutations, stopping the actual server, and a control app for performance.
-- Failures were traced to a cause before being fixed, and any fix for shared logic got a test that
-  failed first.
+- Failures were traced to a cause before being fixed. Shared-logic fixes came with tests, and the
+  mutation check confirmed those tests can fail.
 - A separate agent reviewed the finished code against the brief, without being told what was already
-  known. It reported 11 issues. All were checked, and the confirmed ones were fixed, including the
+  known. It reported 11 issues, and all were addressed. One was a timing race that couldn't be
+  reproduced, so it was designed out by merging two observers into one. The most serious was the
   Saved tab bug above, which an earlier test had wrongly cleared because it tapped between two rows.
