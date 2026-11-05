@@ -105,14 +105,14 @@ software rendering), Apple M5. Built from the command line; the project was not 
 
 | Suite | Result |
 | --- | --- |
-| Shared logic on the JVM, including the real 1,000-flight fixture | TESTS_ANDROID passing |
-| Shared logic on the iOS simulator, on native SQLite | TESTS_IOS passing |
-| iOS UI tests against live servers, including every failure mode | TESTS_UI passing |
+| Shared logic on the JVM, including the real 1,000-flight fixture | 147 passing |
+| Shared logic on the iOS simulator, on native SQLite | 138 passing |
+| iOS UI tests against live servers, including every failure mode | 19 passing |
 | Local API | 3 passing |
 
-To check that the tests can actually fail, 20 deliberate bugs were introduced into the shared code one
+To check that the tests can actually fail, 25 deliberate bugs were introduced into the shared code one
 at a time, such as exclusive date boundaries, grouping markers by city, removing the refresh
-transaction, and letting a dropped selection return. **The suite caught all 20.** One of those tests
+transaction, and letting a dropped selection return. **The suite caught all 25.** One of those tests
 first passed against broken code and had to be rewritten.
 
 Result counts on both platforms were compared with counts computed separately from the raw fixture in

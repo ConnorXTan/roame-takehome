@@ -265,10 +265,11 @@ final class FlightExplorerUITests: XCTestCase {
         let becameRemove = expectation(for: NSPredicate(format: "label == 'Remove'"), evaluatedWith: saveButton)
         wait(for: [becameRemove], timeout: 3)
 
-        // A search that excludes the flight must not hide it from Saved.
-        let origin = app.textFields["origin-field"]
-        origin.tap()
-        origin.typeText("nowhere")
+        // A search that excludes the flight must not hide it from Saved. Return dismisses the
+        // keyboard, which would otherwise cover the tab bar.
+        let destination = app.textFields["destination-field"]
+        destination.tap()
+        destination.typeText("nowhere\n")
         waitForCount("0 flights")
 
         app.tabBars.buttons["Saved"].tap()
