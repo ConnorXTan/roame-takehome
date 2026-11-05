@@ -108,4 +108,4 @@ makes every save and remove fail:
 
 Open each app once with the API running, stop the API, then close and reopen the app. Cached results
 and saved flights are all there, and a banner shows when the data was last updated. Map tiles aren't
-cached for offline use, but markers and routes still draw.
+downloaded for offline use.

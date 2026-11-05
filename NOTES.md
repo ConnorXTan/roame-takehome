@@ -32,9 +32,9 @@ Key decisions:
   `INSERT OR IGNORE` plus `UPDATE`, because `ON CONFLICT DO UPDATE` needs SQLite 3.24 and Android at
   `minSdk 23` ships older.
 - **MapLibre on Android, so no API key is needed to run the project.** Its style ships in the APK and
-  markers are drawn as bitmaps, so both still work with no network. iOS uses MapKit.
+  markers are drawn as bitmaps, so neither depends on the tile server. iOS uses MapKit.
 - **The local API is a Gradle module,** because a JDK is already required, and it adds failure modes
-  (`-Pmode=empty|error|malformed|slow`) that made those states testable on a real device.
+  (`-Pmode=empty|error|malformed|slow`) that made those states testable in the running apps.
 
 Three things the fixture forced:
 
@@ -77,6 +77,8 @@ permission before its first fetch, and explains itself if denied.
 ## Known limitations
 
 - **Neither app has been run on a physical device.** All checks were on a simulator and an emulator.
+- **Offline was tested by stopping the API, with the internet still on.** Nothing was run in airplane
+  mode, so how the maps behave with no network at all is untested.
 - **Smooth scrolling on Android is not proven.** The emulator here uses a software renderer. Frame
   times were around 32ms at the median, but Android's own Settings app was no better under the same
   test, so the renderer is the bottleneck and real hardware still needs measuring.
@@ -122,9 +124,9 @@ at a time, such as exclusive date boundaries, grouping markers by city, removing
 transaction, and letting a dropped selection return. **The suite caught all 25.** One of those tests
 first passed against broken code and had to be rewritten.
 
-Result counts on both platforms were compared with counts computed separately from the raw fixture in
-Python: `jfk` gives 113, `jfk` to `tokyo` gives 7, Business with Aeroplan or Avios gives 140, and
-Feb 3 to Feb 5 gives 41.
+Result counts were compared with counts computed separately from the raw fixture in Python. Business
+with Aeroplan or Avios gives 140 and Feb 3 to Feb 5 gives 41 on both platforms. Android also matched
+`jfk` at 113 and `jfk` to `tokyo` at 7.
 
 ### On each platform
 
