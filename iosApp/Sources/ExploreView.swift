@@ -219,17 +219,17 @@ struct ExploreView: View {
 
     private var discovery: some View {
         ZStack(alignment: .bottom) {
-            // Both stay alive once opened, so switching keeps the camera and the scroll position.
+            // Kept alive under the list once opened, so returning to it keeps the camera and costs nothing.
             if mapRequested {
                 FlightMapView()
                     .opacity(mode == .map ? 1 : 0)
                     .allowsHitTesting(mode == .map)
                     .accessibilityHidden(mode != .map)
             }
-            listContent
-                .opacity(mode == .list ? 1 : 0)
-                .allowsHitTesting(mode == .list)
-                .accessibilityHidden(mode != .list)
+            // The list can't stay alive the same way: hidden rows would remain in the accessibility tree.
+            if mode == .list {
+                listContent
+            }
         }
     }
 
@@ -288,9 +288,14 @@ private struct ResultsList: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            list.onChange(of: model.newResultsToken) { _, _ in
-                if let first = model.results.first { proxy.scrollTo(first.id, anchor: .top) }
-            }
+            list
+                .onChange(of: model.newResultsToken) { _, _ in
+                    if let first = model.results.first { proxy.scrollTo(first.id, anchor: .top) }
+                }
+                // Coming back from the map, the selected flight is what the user was looking at.
+                .onAppear {
+                    if let id = model.selectedFlight?.id { proxy.scrollTo(id, anchor: .center) }
+                }
         }
     }
 

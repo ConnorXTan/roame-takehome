@@ -83,6 +83,9 @@ permission before its first fetch, and explains itself if denied.
 - **MapKit can't show the whole world on a portrait iPhone.** It stops at about 120° of longitude, so
   iOS starts on Europe to Asia, with fewer airports in view than Android. Panning reaches the rest,
   and when results narrow, the camera moves to frame them, so a search never looks empty.
+- **The iOS list doesn't keep its exact scroll position when switching to the map.** Returning shows
+  the selected flight, or the top if none is selected. Keeping the list alive behind the map would
+  preserve it, but it leaves 1,000 hidden rows reachable by VoiceOver. Android keeps its position.
 - **Displaced labels move when zoom settles,** not continuously during a pinch.
 - **Overlapping labels can still sit a long way from their airport at world zoom.** Zooming in
   releases them, and the leader lines show which is which.
@@ -107,7 +110,7 @@ software rendering), Apple M5. Built from the command line; the project was not 
 | --- | --- |
 | Shared logic on the JVM, including the real 1,000-flight fixture | 147 passing |
 | Shared logic on the iOS simulator, on native SQLite | 138 passing |
-| iOS UI tests against live servers, including every failure mode | 19 passing |
+| iOS UI tests against live servers, including every failure mode | 20 passing |
 | Local API | 3 passing |
 
 To check that the tests can actually fail, 25 deliberate bugs were introduced into the shared code one

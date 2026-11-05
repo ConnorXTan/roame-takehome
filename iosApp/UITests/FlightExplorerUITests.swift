@@ -156,6 +156,8 @@ final class FlightExplorerUITests: XCTestCase {
         app.buttons["show-on-map"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["flight-card"].waitForExistence(timeout: 3), "selection should survive the switch")
         snapshot("06-selected-map")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "close-card").count, 1)
+        XCTAssertFalse(any("results-list").exists, "the list must be out of the accessibility tree on the map")
 
         let origin = app.textFields["origin-field"]
         origin.tap()
@@ -239,6 +241,24 @@ final class FlightExplorerUITests: XCTestCase {
         XCTAssertTrue(any("marker-SYD").waitForExistence(timeout: 8), "the camera should frame the route")
         RunLoop.current.run(until: Date().addingTimeInterval(2))
         snapshot("16-antimeridian")
+    }
+
+    func testReturningFromTheMapShowsTheSelectedFlight() {
+        launch()
+        waitForCount("1,000 flights")
+        let list = any("results-list")
+        list.swipeUp()
+        list.swipeUp()
+        list.swipeUp()
+        let row = list.cells.element(boundBy: 2)
+        let selected = row.staticTexts.element(boundBy: 2).label
+        row.tap()
+        XCTAssertTrue(app.buttons["show-on-map"].waitForExistence(timeout: 3))
+        app.buttons["show-on-map"].tap()
+        XCTAssertTrue(any("flight-card").waitForExistence(timeout: 3))
+
+        app.segmentedControls["mode-picker"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts[selected].waitForExistence(timeout: 3), "the selected flight should be in view")
     }
 
     func testNarrowSearchBringsItsMarkersIntoView() {
