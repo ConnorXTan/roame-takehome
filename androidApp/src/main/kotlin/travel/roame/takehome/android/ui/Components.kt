@@ -46,7 +46,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import travel.roame.takehome.domain.departureLabel
 import travel.roame.takehome.domain.departureRowLabel
@@ -131,15 +130,11 @@ fun FlightRow(
                 "${flight.originCity} to ${flight.destinationCity}",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 "${flight.departureRowLabel} · ${flight.cabin}",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(8.dp))

@@ -63,6 +63,9 @@ private const val ANCHOR_LAYER = "marker-anchor-dots"
 private const val LEADER_SOURCE = "marker-leaders"
 private const val LEADER_LAYER = "marker-leader-lines"
 
+/** The selected flight's card plus its margin, which the route has to stay clear of. */
+private const val BOTTOM_CARD_HEIGHT_DP = 230.0
+
 /** Enough to keep recent labels for quick reuse, while bounding what the style holds on to. */
 private const val MAX_CACHED_ICONS = 120
 
@@ -371,15 +374,21 @@ private class MapRenderer(
     private fun frame(frame: RouteFrame, animate: Boolean, clearsBottomCard: Boolean) {
         val map = map ?: return
         // A centre and zoom instead of LatLngBounds, which can't express a route over the antimeridian.
+        // The route is fitted to the part of the map the bottom card leaves visible, and the camera
+        // padding keeps it centred there. A fixed nudge can't do that across screen sizes.
+        val coveredDp = if (clearsBottomCard) BOTTOM_CARD_HEIGHT_DP else 0.0
         val widthDp = map.width / density
-        val heightDp = map.height / density
+        val heightDp = map.height / density - coveredDp
         val byWidth = ln(widthDp * 360.0 / (frame.longitudeSpan * 512.0)) / ln(2.0)
         val byHeight = ln(heightDp * 170.0 / (frame.latitudeSpan * 512.0)) / ln(2.0)
         val zoom = min(byWidth, byHeight).coerceIn(0.2, 6.0)
-        // Nudged south so the route sits in the part of the map the bottom card doesn't cover.
-        val nudge = if (clearsBottomCard) frame.latitudeSpan * 0.18 else 0.0
-        val target = LatLng((frame.centerLatitude - nudge).coerceIn(-80.0, 80.0), frame.centerLongitude)
-        val update = CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(target).zoom(zoom).build())
+        val update = CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder()
+                .target(LatLng(frame.centerLatitude.coerceIn(-80.0, 80.0), frame.centerLongitude))
+                .zoom(zoom)
+                .padding(0.0, 0.0, 0.0, coveredDp * density)
+                .build(),
+        )
         if (animate) map.easeCamera(update, 450) else map.moveCamera(update)
     }
 }
