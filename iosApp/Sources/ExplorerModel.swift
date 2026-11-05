@@ -39,9 +39,15 @@ struct FlightItem: Identifiable, Equatable {
 
     var routeLabel: String { "\(origin) to \(destination)" }
 
+    /// Every field, so a refresh that changes any detail reaches an open card. `source` is left out
+    /// because it is a Kotlin reference with no value equality of its own in Swift.
     static func == (a: FlightItem, b: FlightItem) -> Bool {
-        a.id == b.id && a.pointsLabel == b.pointsLabel && a.departureLabel == b.departureLabel
+        a.id == b.id && a.origin == b.origin && a.destination == b.destination
+            && a.originCity == b.originCity && a.destinationCity == b.destinationCity
+            && a.pointsLabel == b.pointsLabel && a.departureLabel == b.departureLabel
             && a.cabin == b.cabin && a.program == b.program
+            && a.originCoordinate.isSame(as: b.originCoordinate)
+            && a.destinationCoordinate.isSame(as: b.destinationCoordinate)
     }
 }
 
@@ -69,7 +75,14 @@ struct MarkerItem: Identifiable, Equatable {
     var compactPointsLabel: String { FormattingKt.compactPoints(points: Int32(lowestPoints)) }
 
     static func == (a: MarkerItem, b: MarkerItem) -> Bool {
-        a.code == b.code && a.flightCount == b.flightCount && a.lowestPoints == b.lowestPoints
+        a.code == b.code && a.city == b.city && a.flightCount == b.flightCount
+            && a.lowestPoints == b.lowestPoints && a.coordinate.isSame(as: b.coordinate)
+    }
+}
+
+private extension CLLocationCoordinate2D {
+    func isSame(as other: CLLocationCoordinate2D) -> Bool {
+        latitude == other.latitude && longitude == other.longitude
     }
 }
 
@@ -110,8 +123,8 @@ final class ExplorerModel {
     private(set) var phase = ContentPhase.loading
     private(set) var isRefreshing = false
     private(set) var isStale = false
+    private(set) var staleMessage: String?
     private(set) var failureMessage: String?
-    private(set) var lastUpdatedLabel: String?
 
     private(set) var results: [FlightItem] = []
     /// Bumped when a new search or filter lands, so the list can return to the top. A plain refresh doesn't.
@@ -176,8 +189,8 @@ final class ExplorerModel {
         assign(\.phase, ContentPhase(state.content), changed: phase != ContentPhase(state.content))
         assign(\.isRefreshing, state.isRefreshing, changed: isRefreshing != state.isRefreshing)
         assign(\.isStale, state.isStale, changed: isStale != state.isStale)
+        assign(\.staleMessage, state.staleMessage, changed: staleMessage != state.staleMessage)
         assign(\.failureMessage, state.failureMessage, changed: failureMessage != state.failureMessage)
-        assign(\.lastUpdatedLabel, state.lastUpdatedLabel, changed: lastUpdatedLabel != state.lastUpdatedLabel)
 
         // Only re-map the big list when its revision says it really changed.
         if state.resultsRevision != resultsRevision {

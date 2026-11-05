@@ -16,7 +16,7 @@ fun createExplorerController(
     failSavedWrites: Boolean = false,
 ): ExplorerController = createController(
     client = HttpClient(OkHttp) { configureFlightClient(this) },
-    driver = AndroidSqliteDriver(FlightDatabase.Schema, context.applicationContext, "flights.db"),
+    createDriver = { AndroidSqliteDriver(FlightDatabase.Schema, context.applicationContext, "flights.db") },
     baseUrl = baseUrl,
     ioDispatcher = Dispatchers.IO,
     failSavedWrites = failSavedWrites,

@@ -34,7 +34,8 @@ data class ExplorerState(
     val failureMessage: String? = null,
     /** True when the data on screen is older than a refresh we just failed to complete. */
     val isStale: Boolean = false,
-    val lastUpdatedLabel: String? = null,
+    /** What the stale banner says. Only "Offline" if that is what happened: a 500 means the server answered. */
+    val staleMessage: String? = null,
     val totalFlightCount: Int = 0,
 
     val query: FlightQuery = FlightQuery(),

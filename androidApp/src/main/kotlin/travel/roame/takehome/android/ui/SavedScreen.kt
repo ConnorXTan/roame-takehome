@@ -27,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import travel.roame.takehome.presentation.ExplorerController
 import travel.roame.takehome.presentation.ExplorerState
@@ -42,7 +43,9 @@ fun SavedScreen(state: ExplorerState, controller: ExplorerController) {
     val open = state.saved.firstOrNull { it.id == openId }
     BackHandler(enabled = open != null) { openId = null }
 
-    Column(Modifier.fillMaxSize().background(colors.canvas)) {
+    // Explore stays composed underneath to keep its state, and being transparent doesn't stop it taking
+    // input. Without this empty pointer handler, a tap here falls through and can save a hidden flight.
+    Column(Modifier.fillMaxSize().background(colors.canvas).pointerInput(Unit) {}) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars).fillMaxWidth().background(colors.surface))
         Column(Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text("Saved", style = MaterialTheme.typography.headlineMedium, color = colors.ink)

@@ -169,7 +169,7 @@ struct ExploreView: View {
     private var staleBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "icloud.slash").font(.footnote.weight(.semibold))
-            Text(model.isRefreshing ? "Checking for new flights…" : "Offline · flights from \(model.lastUpdatedLabel ?? "earlier")")
+            Text(model.staleMessage ?? "")
                 .font(.footnote.weight(.medium))
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Retry") { model.refresh() }
@@ -204,7 +204,9 @@ struct ExploreView: View {
                 MessageState(
                     systemImage: "tray",
                     title: "No flights available",
-                    message: "The flight service is working but has nothing to offer right now. Pull down to check again."
+                    message: model.isStale
+                        ? "The last update had no flights, and we couldn't check for new ones. Pull down to try again."
+                        : "The flight service is working but has nothing to offer right now. Pull down to check again."
                 )
                 .containerRelativeFrame(.vertical)
             }
@@ -217,15 +219,17 @@ struct ExploreView: View {
 
     private var discovery: some View {
         ZStack(alignment: .bottom) {
-            // Kept alive under the list once opened, so returning to it keeps the camera and costs nothing.
+            // Both stay alive once opened, so switching keeps the camera and the scroll position.
             if mapRequested {
                 FlightMapView()
                     .opacity(mode == .map ? 1 : 0)
                     .allowsHitTesting(mode == .map)
+                    .accessibilityHidden(mode != .map)
             }
-            if mode == .list {
-                listContent
-            }
+            listContent
+                .opacity(mode == .list ? 1 : 0)
+                .allowsHitTesting(mode == .list)
+                .accessibilityHidden(mode != .list)
         }
     }
 

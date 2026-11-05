@@ -199,10 +199,46 @@ final class FlightExplorerUITests: XCTestCase {
         dumpTree("07a-after-pan")
         XCTAssertGreaterThan(abs(marker.frame.minX - start.minX), 20, "panning should move the map under the markers")
 
-        map.pinch(withScale: 0.3, velocity: -2)
-        map.pinch(withScale: 0.3, velocity: -2)
-        snapshot("07b-zoomed-out")
-        dumpTree("07b-zoomed-out")
+        // Zooming in spreads the airports apart, so two neighbours end up further from each other.
+        let athens = any("marker-ATH")
+        let rome = any("marker-FCO")
+        XCTAssertTrue(athens.waitForExistence(timeout: 3) && rome.exists)
+        let before = abs(athens.frame.midX - rome.frame.midX)
+        map.pinch(withScale: 2.5, velocity: 2)
+        snapshot("07b-zoomed-in")
+        let after = expectation(
+            for: NSPredicate { _, _ in abs(athens.frame.midX - rome.frame.midX) > before * 1.3 },
+            evaluatedWith: nil
+        )
+        wait(for: [after], timeout: 5)
+    }
+
+    func testASearchMadeBeforeOpeningTheMapIsFramed() {
+        launch()
+        waitForCount("1,000 flights")
+        let destination = app.textFields["destination-field"]
+        destination.tap()
+        destination.typeText("Sydney")
+        XCTAssertNotEqual(resultCount.label, "1,000 flights")
+        openMap()
+        XCTAssertTrue(any("marker-SYD").waitForExistence(timeout: 8), "Sydney starts off screen unless the camera moves")
+    }
+
+    func testRoutesOverTheAntimeridianCrossThePacific() {
+        launch()
+        waitForCount("1,000 flights")
+        let origin = app.textFields["origin-field"]
+        origin.tap()
+        origin.typeText("yvr")
+        let destination = app.textFields["destination-field"]
+        destination.tap()
+        destination.typeText("sydney")
+        waitForCount("7 flights")
+        any("results-list").cells.element(boundBy: 0).tap()
+        app.buttons["show-on-map"].tap()
+        XCTAssertTrue(any("marker-SYD").waitForExistence(timeout: 8), "the camera should frame the route")
+        RunLoop.current.run(until: Date().addingTimeInterval(2))
+        snapshot("16-antimeridian")
     }
 
     func testNarrowSearchBringsItsMarkersIntoView() {
@@ -228,6 +264,12 @@ final class FlightExplorerUITests: XCTestCase {
         saveButton.tap()
         let becameRemove = expectation(for: NSPredicate(format: "label == 'Remove'"), evaluatedWith: saveButton)
         wait(for: [becameRemove], timeout: 3)
+
+        // A search that excludes the flight must not hide it from Saved.
+        let origin = app.textFields["origin-field"]
+        origin.tap()
+        origin.typeText("nowhere")
+        waitForCount("0 flights")
 
         app.tabBars.buttons["Saved"].tap()
         XCTAssertTrue(app.staticTexts["saved-count"].waitForExistence(timeout: 3))

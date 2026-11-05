@@ -44,12 +44,12 @@ fun StartWithLocalNetworkAccess(controller: ExplorerController) {
         controller.start()
     }
     LaunchedEffect(Unit) {
-        when {
-            hasLocalNetworkAccess(context) -> controller.start()
-            !asked -> {
-                asked = true
-                request.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-            }
+        if (hasLocalNetworkAccess(context) || asked) {
+            // After process death `asked` survives but the result callback doesn't, so start regardless.
+            controller.start()
+        } else {
+            asked = true
+            request.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
         }
     }
 }

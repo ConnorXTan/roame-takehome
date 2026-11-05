@@ -15,12 +15,13 @@ import travel.roame.takehome.model.Flight
 /** Wires the real graph. Platforms supply only the things that differ: the HTTP engine and the SQLite driver. */
 internal fun createController(
     client: HttpClient,
-    driver: SqlDriver,
+    createDriver: () -> SqlDriver,
     baseUrl: String,
     ioDispatcher: CoroutineDispatcher,
     failSavedWrites: Boolean,
 ): ExplorerController {
-    val store = SqlFlightStore(FlightDatabase(driver), ioDispatcher)
+    val driver = lazy(createDriver)
+    val store = SqlFlightStore(lazy { FlightDatabase(driver.value) }, ioDispatcher)
     val repository = FlightRepository(
         api = KtorFlightApi(client, baseUrl, parseDispatcher = Dispatchers.Default),
         store = if (failSavedWrites) FailingSavedWrites(store) else store,
@@ -31,7 +32,7 @@ internal fun createController(
         compute = Dispatchers.Default,
         onClose = {
             client.close()
-            driver.close()
+            if (driver.isInitialized()) driver.value.close()
         },
     )
 }

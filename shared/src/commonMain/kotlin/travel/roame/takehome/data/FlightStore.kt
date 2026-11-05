@@ -5,6 +5,9 @@ import app.cash.sqldelight.coroutines.mapToList
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import travel.roame.takehome.db.Cached_flight
@@ -28,10 +31,15 @@ interface FlightStore {
     suspend fun removeFlight(id: String)
 }
 
+/**
+ * [lazyDatabase] is first touched on [ioDispatcher]. Opening SQLite and creating the schema is disk
+ * work, and the iOS driver does it in its constructor, so it can't happen while wiring up the app.
+ */
 class SqlFlightStore(
-    private val database: FlightDatabase,
+    private val lazyDatabase: Lazy<FlightDatabase>,
     private val ioDispatcher: CoroutineDispatcher,
 ) : FlightStore {
+    private val database: FlightDatabase get() = lazyDatabase.value
     private val queries: FlightsQueries get() = database.flightsQueries
 
     override suspend fun loadSnapshot(): FlightSnapshot? = withContext(ioDispatcher) {
@@ -53,14 +61,16 @@ class SqlFlightStore(
         }
     }
 
-    override fun observeSaved(): Flow<List<Flight>> =
-        queries.selectSaved { id, origin, destination, departureDate, program, points, cabin, originCity,
+    override fun observeSaved(): Flow<List<Flight>> = flow {
+        val saved = queries.selectSaved { id, origin, destination, departureDate, program, points, cabin, originCity,
                 destinationCity, originLatitude, originLongitude, destinationLatitude, destinationLongitude, _ ->
             Flight(
                 id, origin, destination, LocalDate.parse(departureDate), program, points.toInt(), cabin, originCity,
                 destinationCity, originLatitude, originLongitude, destinationLatitude, destinationLongitude,
             )
-        }.asFlow().mapToList(ioDispatcher)
+        }
+        emitAll(saved.asFlow().mapToList(ioDispatcher))
+    }.flowOn(ioDispatcher)
 
     override suspend fun saveFlight(flight: Flight, savedAt: Instant): Unit = withContext(ioDispatcher) {
         // Saving again updates the details in place: no duplicate, and it keeps its original position.

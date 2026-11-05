@@ -91,6 +91,19 @@ class ExplorerControllerTest {
     }
 
     @Test
+    fun firstLoadNeverFlashesNoMatches() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val controller = ExplorerController(FlightRepository(FakeApi(flights), FakeStore(), FixedClock), dispatcher, dispatcher)
+        val seen = mutableListOf<ContentKind>()
+        controller.watch { seen += it.content }
+        controller.start()
+        advanceUntilIdle()
+        assertEquals(ContentKind.RESULTS, seen.last())
+        assertFalse(ContentKind.NO_MATCHES in seen, "saw $seen")
+        controller.close()
+    }
+
+    @Test
     fun noCacheAndNoNetworkIsAnErrorWithARetryThatWorks() = runTest {
         val api = FakeApi(flights).apply { failUnreachable() }
         val controller = controller(api)
@@ -131,7 +144,7 @@ class ExplorerControllerTest {
         assertEquals(ContentKind.RESULTS, state.content)
         assertEquals(3, state.results.size)
         assertTrue(state.isStale)
-        assertNotNull(state.lastUpdatedLabel)
+        assertNotNull(state.staleMessage)
         controller.close()
     }
 
@@ -149,6 +162,20 @@ class ExplorerControllerTest {
     }
 
     @Test
+    fun theBannerOnlySaysOfflineWhenTheServerCouldNotBeReached() = runTest {
+        val api = FakeApi().apply { failUnreachable() }
+        val controller = controller(api, FakeStore(FlightSnapshot(flights, FixedClock.now())))
+        advanceUntilIdle()
+        assertTrue(assertNotNull(controller.state.value.staleMessage).startsWith("Offline"))
+
+        api.failure = FlightApiException.Server(500)
+        controller.refresh()
+        advanceUntilIdle()
+        assertTrue(assertNotNull(controller.state.value.staleMessage).startsWith("Couldn't refresh"))
+        controller.close()
+    }
+
+    @Test
     fun theStaleMarkStaysWhileARetryRuns() = runTest {
         val api = FakeApi(flights).apply { failUnreachable() }
         val controller = controller(api, FakeStore(FlightSnapshot(flights, FixedClock.now())))
@@ -158,6 +185,7 @@ class ExplorerControllerTest {
         runCurrent()
         assertTrue(controller.state.value.isRefreshing)
         assertTrue(controller.state.value.isStale, "the banner should stay up and say it is checking")
+        assertEquals("Checking for new flights…", controller.state.value.staleMessage)
         api.failure = null
         api.gate?.complete(Unit)
         advanceUntilIdle()
@@ -422,7 +450,45 @@ class ExplorerControllerTest {
         controller.close()
     }
 
+    @Test
+    fun selectingAFlightElsewhereClosesAnUnrelatedDestination() = runTest {
+        val controller = controller()
+        advanceUntilIdle()
+        controller.selectDestination("LHR")
+        controller.selectFlight("paris")
+        val state = controller.state.value
+        assertEquals("paris", state.selectedFlight?.id)
+        assertNull(state.selectedDestination, "LHR must not stay open beside a route to CDG")
+
+        controller.selectFlight(null)
+        assertNull(controller.state.value.selectedDestination, "closing the card must not reopen LHR")
+        controller.close()
+    }
+
+    @Test
+    fun selectingAFlightFromItsDestinationKeepsItOpen() = runTest {
+        val controller = controller()
+        advanceUntilIdle()
+        controller.selectDestination("LHR")
+        controller.selectFlight("london")
+        assertEquals("LHR", controller.state.value.selectedDestination?.code)
+        controller.close()
+    }
+
     // Saved flights
+
+    @Test
+    fun savedFlightsKeepUpdatingAfterAReadFailure() = runTest {
+        val store = FakeStore().apply { failNextSavedRead = true }
+        val controller = controller(store = store)
+        advanceUntilIdle()
+        assertNotNull(controller.state.value.message, "a failed read must be visible")
+
+        controller.save(london)
+        advanceUntilIdle()
+        assertEquals(listOf("london"), controller.state.value.saved.map { it.id })
+        controller.close()
+    }
 
     @Test
     fun savingShowsInBothSavedStateAndIds() = runTest {

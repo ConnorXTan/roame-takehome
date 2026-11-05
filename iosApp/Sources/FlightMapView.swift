@@ -97,6 +97,11 @@ struct FlightMapView: View {
 
             overlays
         }
+        .onAppear {
+            // Filters set before the map first opened never had a camera to move.
+            guard model.selectedFlight == nil, !model.activeFilters.isEmpty, let region = model.markersRegion else { return }
+            camera = .region(region)
+        }
         .onChange(of: model.markers) { old, new in
             placements = model.markerPlacements(worldWidth: worldWidth)
             // A narrow search shouldn't leave its only markers off screen and the map looking empty.

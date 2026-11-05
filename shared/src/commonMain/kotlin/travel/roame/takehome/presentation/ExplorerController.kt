@@ -6,14 +6,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,16 +61,13 @@ class ExplorerController(
     private var selectedDestinationCode: String? = null
     private val cacheLoad = scope.launch { repository.loadCache() }
     private var started = false
-    private var hasSnapshot = false
-    private var refreshFailed = false
     private var retryAction: (() -> Unit)? = null
     private var nextMessageId = 0
 
     val state: StateFlow<ExplorerState> = _state.asStateFlow()
 
     init {
-        observeResults()
-        observeSnapshot()
+        observeData()
         observeSaved()
     }
 
@@ -145,6 +143,10 @@ class ExplorerController(
     /** Null clears the flight but keeps an open destination, so closing a card returns to its list. */
     fun selectFlight(id: String?) {
         selectedFlightId = id
+        // Picking a flight somewhere else, such as in the list, replaces an open destination: it
+        // shouldn't stay highlighted beside a different route, or reopen when the card closes.
+        val destination = id?.let { flightId -> _state.value.results.firstOrNull { it.id == flightId }?.destination }
+        if (destination != null && destination != selectedDestinationCode) selectedDestinationCode = null
         _state.update { it.withSelection() }
     }
 
@@ -214,49 +216,44 @@ class ExplorerController(
         )
     }
 
+    /**
+     * One pipeline for everything derived from the data, so the state never holds a snapshot next
+     * to results from before it. mapLatest drops any evaluation a newer input has overtaken, so a
+     * slow pass can never overwrite the result of the user's latest change.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun observeResults() {
-        combine(repository.snapshot, query) { snapshot, query -> snapshot to query }
-            // mapLatest drops any evaluation that a newer input has overtaken, so a slow filter
-            // pass can never overwrite the results of the user's latest change.
-            .mapLatest { (snapshot, query) ->
-                withContext(compute) {
-                    val results = filterFlights(snapshot?.flights.orEmpty(), query)
-                    Evaluation(results, aggregateByDestination(results))
-                }
-            }
+    private fun observeData() {
+        combine(repository.snapshot, repository.status, query, ::Inputs)
+            .mapLatest { inputs -> withContext(compute) { evaluate(inputs) } }
             .onEach { evaluation ->
-                _state.update { current ->
-                    val changed = evaluation.results != current.results
-                    current.copy(
-                        results = evaluation.results,
-                        resultsRevision = current.resultsRevision + if (changed) 1 else 0,
-                        markers = evaluation.markers,
-                    ).withSelection().withContent()
-                }
-            }
-            .launchIn(scope)
-    }
-
-    private fun observeSnapshot() {
-        combine(repository.snapshot, repository.status) { snapshot, status -> snapshot to status }
-            .mapLatest { (snapshot, status) ->
-                val options = withContext(compute) { filterOptions(snapshot?.flights.orEmpty()) }
-                Triple(snapshot, status, options)
-            }
-            .onEach { (snapshot, status, options) ->
-                hasSnapshot = snapshot != null
-                refreshFailed = status is RefreshStatus.Failed
-                _state.update { it.withData(snapshot, status, options) }
+                _state.update { it.applying(evaluation) }
                 // Bounds may have moved under an existing filter, so re-check it against the new data.
                 updateQuery { current -> current }
             }
             .launchIn(scope)
     }
 
+    private fun evaluate(inputs: Inputs): Evaluation {
+        val flights = inputs.snapshot?.flights.orEmpty()
+        val results = filterFlights(flights, inputs.query)
+        return Evaluation(
+            snapshot = inputs.snapshot,
+            status = inputs.status,
+            results = results,
+            markers = aggregateByDestination(results),
+            options = filterOptions(flights),
+        )
+    }
+
     private fun observeSaved() {
         repository.saved
-            .catch { showMessage("Couldn't load your saved flights.", canRetry = false) }
+            // A failed read ends a Flow. Without this, later saves would commit but never reach the UI.
+            .retryWhen { cause, attempt ->
+                println("Saved flights unreadable: $cause")
+                if (attempt == 0L) showMessage("Couldn't load your saved flights.", canRetry = false)
+                delay(SAVED_RETRY_DELAY_MS)
+                true
+            }
             .onEach { saved ->
                 _state.update { current ->
                     current.copy(
@@ -310,32 +307,35 @@ class ExplorerController(
         )
     }
 
-    private fun ExplorerState.withData(
-        snapshot: FlightSnapshot?,
-        status: RefreshStatus,
-        options: FilterOptions,
-    ): ExplorerState {
-        val failure = (status as? RefreshStatus.Failed)?.reason
-        val refreshing = status == RefreshStatus.Refreshing
+    private fun ExplorerState.applying(evaluation: Evaluation): ExplorerState {
+        val snapshot = evaluation.snapshot
+        val failure = (evaluation.status as? RefreshStatus.Failed)?.reason
+        val refreshing = evaluation.status == RefreshStatus.Refreshing
+        // A retry in progress hasn't made the data any fresher, so it stays marked as stale.
+        val stale = snapshot != null && (failure != null || (refreshing && isStale))
+        val updated = snapshot?.let { lastUpdatedLabel(it.fetchedAt) }
         return copy(
+            content = when {
+                snapshot == null -> if (failure != null) ContentKind.ERROR else ContentKind.LOADING
+                snapshot.flights.isEmpty() -> ContentKind.NO_FLIGHTS
+                evaluation.results.isEmpty() -> ContentKind.NO_MATCHES
+                else -> ContentKind.RESULTS
+            },
             isRefreshing = refreshing,
             failureMessage = failure?.let(::describe),
-            // A retry in progress hasn't made the data any fresher, so it stays marked as stale.
-            isStale = snapshot != null && (failure != null || (refreshing && isStale)),
-            lastUpdatedLabel = snapshot?.let { lastUpdatedLabel(it.fetchedAt) },
+            isStale = stale,
+            staleMessage = when {
+                !stale -> null
+                refreshing -> "Checking for new flights…"
+                failure == RefreshFailure.UNREACHABLE -> "Offline · flights from $updated"
+                else -> "Couldn't refresh · flights from $updated"
+            },
             totalFlightCount = snapshot?.flights?.size ?: 0,
-            options = options,
-        ).withContent()
-    }
-
-    private fun ExplorerState.withContent(): ExplorerState {
-        val content = when {
-            !hasSnapshot -> if (refreshFailed) ContentKind.ERROR else ContentKind.LOADING
-            totalFlightCount == 0 -> ContentKind.NO_FLIGHTS
-            results.isEmpty() -> ContentKind.NO_MATCHES
-            else -> ContentKind.RESULTS
-        }
-        return copy(content = content)
+            options = evaluation.options,
+            results = evaluation.results,
+            resultsRevision = resultsRevision + if (evaluation.results != results) 1 else 0,
+            markers = evaluation.markers,
+        ).withSelection()
     }
 
     private fun describe(failure: RefreshFailure): String = when (failure) {
@@ -345,5 +345,17 @@ class ExplorerController(
         RefreshFailure.STORAGE -> "Couldn't store flights on this device. Please try again."
     }
 
-    private class Evaluation(val results: List<Flight>, val markers: List<DestinationMarker>)
+    private data class Inputs(val snapshot: FlightSnapshot?, val status: RefreshStatus, val query: FlightQuery)
+
+    private class Evaluation(
+        val snapshot: FlightSnapshot?,
+        val status: RefreshStatus,
+        val results: List<Flight>,
+        val markers: List<DestinationMarker>,
+        val options: FilterOptions,
+    )
+
+    private companion object {
+        const val SAVED_RETRY_DELAY_MS = 2_000L
+    }
 }

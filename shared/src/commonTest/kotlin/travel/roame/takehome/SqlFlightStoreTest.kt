@@ -21,7 +21,7 @@ class SqlFlightStoreTest {
     private var store = storeOn(driver)
 
     private fun storeOn(driver: app.cash.sqldelight.db.SqlDriver) =
-        SqlFlightStore(FlightDatabase(driver), Dispatchers.Unconfined)
+        SqlFlightStore(lazyOf(FlightDatabase(driver)), Dispatchers.Unconfined)
 
     /** Closes the connection and opens the file afresh, as relaunching the app would. */
     private fun reopen() {

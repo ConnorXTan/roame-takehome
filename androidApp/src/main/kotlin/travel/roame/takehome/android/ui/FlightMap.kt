@@ -110,16 +110,20 @@ fun FlightMap(
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
+            // The map can leave composition while the activity is running, when results disappear,
+            // and onDestroy alone would leave its receivers registered.
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) mapView.onPause()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) mapView.onStop()
             renderer.detach()
             mapView.onDestroy()
         }
     }
 
     LaunchedEffect(mapView) { mapView.getMapAsync(renderer::attach) }
-    LaunchedEffect(state.markers, state.selectedDestination?.code, state.selectedFlight?.destination) {
-        renderer.showMarkers(state.markers, state.selectedDestination?.code ?: state.selectedFlight?.destination)
+    val highlighted = state.selectedDestination?.code ?: state.selectedFlight?.destination
+    LaunchedEffect(state.markers, highlighted, state.selectedFlight?.id, state.activeFilters.isEmpty()) {
+        renderer.show(state.markers, highlighted, state.selectedFlight, isFiltered = state.activeFilters.isNotEmpty())
     }
-    LaunchedEffect(state.selectedFlight?.id) { renderer.showRoute(state.selectedFlight) }
 
     // The map stays alive behind the list and the Saved tab, and being a native view it would still
     // get drags that nothing above it consumes. Consuming them here, rather than hiding the view,
@@ -150,6 +154,7 @@ private class MapRenderer(
     private var markers: List<DestinationMarker> = emptyList()
     private var highlighted: String? = null
     private var route: Flight? = null
+    private var filtered = false
     private var laidOutZoom = -1.0
     private val addedIcons = mutableSetOf<String>()
     private val density = context.resources.displayMetrics.density
@@ -231,6 +236,8 @@ private class MapRenderer(
             )
             renderMarkers()
             renderRoute(animate = false)
+            // Filters set before the map first opened never had a camera to move.
+            if (route == null && filtered) frameResults(animate = false)
         }
     }
 
@@ -239,18 +246,22 @@ private class MapRenderer(
         style = null
     }
 
-    fun showMarkers(next: List<DestinationMarker>, highlight: String?) {
+    /** One entry point, because whether results get framed depends on whether a route is still showing. */
+    fun show(next: List<DestinationMarker>, highlight: String?, flight: Flight?, isFiltered: Boolean) {
         val resultsMoved = next.map { it.code } != markers.map { it.code }
+        val routeChanged = flight?.id != route?.id
         markers = next
         highlighted = highlight
+        route = flight
+        filtered = isFiltered
         renderMarkers()
+        if (routeChanged) renderRoute(animate = true)
         // A narrow search shouldn't leave its only markers off screen and the map looking empty.
-        if (resultsMoved && route == null) markersFrame(next)?.let { frame(it, animate = true, clearsBottomCard = false) }
+        if (resultsMoved && route == null) frameResults(animate = true)
     }
 
-    fun showRoute(flight: Flight?) {
-        route = flight
-        renderRoute(animate = true)
+    private fun frameResults(animate: Boolean) {
+        markersFrame(markers)?.let { frame(it, animate, clearsBottomCard = false) }
     }
 
     private fun renderMarkers() {

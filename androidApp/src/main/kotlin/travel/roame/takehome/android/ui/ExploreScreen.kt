@@ -149,7 +149,11 @@ fun ExploreScreen(state: ExplorerState, controller: ExplorerController, visible:
                     MessageState(
                         icon = Icons.Filled.Inbox,
                         title = "No flights available",
-                        body = "The flight service is working but has nothing to offer right now. Pull down to check again.",
+                        body = if (state.isStale) {
+                            "The last update had no flights, and we couldn't check for new ones. Pull down to try again."
+                        } else {
+                            "The flight service is working but has nothing to offer right now. Pull down to check again."
+                        },
                     )
                 }
                 state.content == ContentKind.NO_MATCHES && mode == DiscoveryMode.LIST -> MessageState(
@@ -411,7 +415,7 @@ private fun StatusBanner(state: ExplorerState, onRetry: () -> Unit) {
             Icon(Icons.Filled.CloudOff, null, tint = colors.warning, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (state.isRefreshing) "Checking for new flights…" else "Offline · flights from ${state.lastUpdatedLabel}",
+                state.staleMessage.orEmpty(),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.warning,
                 modifier = Modifier.weight(1f),

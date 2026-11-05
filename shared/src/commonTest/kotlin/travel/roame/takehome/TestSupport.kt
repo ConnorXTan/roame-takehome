@@ -6,6 +6,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import travel.roame.takehome.data.FlightApi
@@ -60,6 +62,7 @@ class FakeStore(var snapshot: FlightSnapshot? = null) : FlightStore {
     var failReads = false
     var failSnapshotWrites = false
     var failSavedWrites = false
+    var failNextSavedRead = false
     var saveCalls = 0
 
     /** Makes [writeGate] ignore cancellation, the way a real SQLite write can't be interrupted. */
@@ -78,7 +81,13 @@ class FakeStore(var snapshot: FlightSnapshot? = null) : FlightStore {
         this.snapshot = snapshot
     }
 
-    override fun observeSaved(): Flow<List<Flight>> = saved
+    override fun observeSaved(): Flow<List<Flight>> = flow {
+        if (failNextSavedRead) {
+            failNextSavedRead = false
+            throw IllegalStateException("disk error")
+        }
+        emitAll(saved)
+    }
 
     override suspend fun saveFlight(flight: Flight, savedAt: Instant) {
         saveCalls++

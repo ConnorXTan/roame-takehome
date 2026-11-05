@@ -16,7 +16,7 @@ fun createExplorerController(
     databaseName: String,
 ): ExplorerController = createController(
     client = HttpClient(Darwin) { configureFlightClient(this) },
-    driver = NativeSqliteDriver(FlightDatabase.Schema, databaseName),
+    createDriver = { NativeSqliteDriver(FlightDatabase.Schema, databaseName) },
     baseUrl = baseUrl,
     ioDispatcher = Dispatchers.IO,
     failSavedWrites = failSavedWrites,
